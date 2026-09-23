@@ -51,22 +51,40 @@ Source: `ingest/survey.py` over all 1,056 filings (106 companies, fiscal years 2
 - Tokens per filing: 10th percentile 53k, median 109k, 90th percentile 200k.
 - The corpus has about 115M tokens. At 500 tokens per chunk, that is about 230k chunks.
 
-## Chunking proposal
+## 10-K structure
 
-1. **Clean.** Strip the XML declaration and delete `<ix:header>`. Unwrap the other `ix:` tags and keep their text.
-2. **Split into pages** at page-break elements. Each page gets a `page_index` (its position, 1 to N) and a `page_label` (the printed number, for example `47` or `F-3`).
-3. **Find page labels.** Check the last 3 lines and the first 2 lines for a number pattern. Then check the sequence: labels must increase by 1. Fill gaps and drop outliers from the sequence. The UI uses `page_index` to show the page, and the citation shows `page_label`.
-4. **Remove page furniture.** Delete the page number line, repeated running headers and footers (for example `Table of Contents`, `Pfizer Inc. 2024 Form 10-K`), and table-of-contents pages.
-5. **Find sections.** Match `Item N` headings and skip the table-of-contents hits. If no Item headings exist, match the standard section titles (for example `RISK FACTORS` maps to Item 1A). Also keep the sub-heading (for example a risk factor title or a Note title) as `section_path`.
-6. **Chunk text** inside one section. Target 400 to 500 tokens with about 50 tokens of overlap. Split on paragraph boundaries, then on sentence boundaries. A chunk can cross a page break, so it stores `page_start` and `page_end`.
-7. **Chunk tables** apart from text.
-   - A table under 20 tokens, or with only one column, is layout. Treat it as text.
-   - Convert a data table to Markdown rows.
-   - A table up to about 800 tokens is one chunk.
-   - A larger table is split by rows. Each part repeats the header rows.
-   - Each table chunk gets the text line above the table as its caption, for example "Consolidated Statements of Operations".
-8. **Add context to each chunk.** Prefix the embedded text with `Company, FY, Item, section_path`. The model sees which filing a chunk is from. The stored `text` stays clean for citations.
+The SEC fixes the Items of Form 10-K and most of their content (Regulation S-K, Regulation S-X, US GAAP). The company fixes the headings, the layout, the sub-sections, and, in an integrated annual report, the order of sections. The Items are:
+
+| Part | Items |
+|---|---|
+| I | 1 Business, 1A Risk Factors, 1B Unresolved Staff Comments, 1C Cybersecurity (from FY2023), 2 Properties, 3 Legal Proceedings, 4 Mine Safety |
+| II | 5 Market for Common Equity, 6 [Reserved], 7 MD&A, 7A Market Risk, 8 Financial Statements, 9 / 9A / 9B / 9C |
+| III | 10 to 14, usually incorporated by reference from the proxy statement |
+| IV | 15 Exhibits, 16 Form 10-K Summary |
+
+In Item 8, inline XBRL wraps each Note in a standard `us-gaap:...TextBlock` tag. This gives exact Note boundaries with standard names in filings from 2019 on.
+
+## Chunking design: small-to-big
+
+The unit of structure is the SEC hierarchy. Pages are metadata only.
+
+```
+Filing -> Part -> Item -> section -> paragraph or table
+```
+
+1. **Clean.** Strip the XML declaration. Delete `<ix:header>`. Keep the text of other `ix:` tags, and keep the XBRL TextBlock names as section markers.
+2. **Pages as metadata.** Record `page_index` and `page_label` at each page break. Delete page numbers, running headers and footers, and table-of-contents pages from the text.
+3. **Items.** Match `Item N` headings, skipping table-of-contents hits. For integrated annual reports (C, MS, JPM), map sections to Items through the cross-reference index or the standard section titles.
+4. **Sections (parents).** One section per sub-section of an Item:
+   - Item 1A: one section per risk factor heading.
+   - Item 7 and 7A: one section per MD&A heading.
+   - Item 8: one section per financial statement and per Note (XBRL TextBlock where present).
+   - Other Items: one section per heading, or the whole Item if it is short.
+5. **Chunks (children).** Inside one section, join paragraphs and tables up to 300 to 400 tokens, with about 50 tokens of overlap. A chunk never crosses a section. The embedding model (`bge-small-en-v1.5`) reads 512 tokens at most.
+6. **Tables.** Layout tables become text. Data tables become Markdown. A table over the chunk limit is split by rows, and each part repeats the header rows.
+7. **Context prefix.** Embed `Company | FY | Item | section title` + chunk text. Store the clean text for citations.
+8. **Retrieval.** Hybrid search and rerank on chunks. Group hits by section. Send each parent section to the LLM up to about 4,000 tokens. If a section is larger, send a window around the matched chunks. Stop at a total budget of about 20,000 tokens. Evals tune these numbers.
 
 ## Open question
 
-The exhibit index and signature pages (Items 15 and 16) are long and have little content for questions. The proposal indexes them. We can drop them later if evals show that they add noise.
+Items 15 and 16 (exhibits and summary) have little content for questions. They are indexed for now. Evals decide if we drop them.
