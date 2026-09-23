@@ -6,7 +6,7 @@ COMPANIES: dict[str, list[str]] = {
         "IBM", "QCOM", "TXN", "INTU", "AMAT", "MU",
     ],
     "Communication Services": [
-        "GOOGL", "META", "NFLX", "DIS", "T", "VZ", "CMCSA", "TMUS", "EA",
+        "GOOGL", "META", "NFLX", "DIS", "T", "VZ", "CMCSA", "TMUS", "CHTR",
     ],
     "Consumer Discretionary": [
         "AMZN", "TSLA", "HD", "MCD", "NKE", "SBUX", "LOW", "BKNG", "TJX", "GM", "F",
@@ -32,3 +32,12 @@ COMPANIES: dict[str, list[str]] = {
 }
 
 TICKERS: list[str] = [t for group in COMPANIES.values() for t in group]
+
+# Old registrant CIKs for companies that moved to a new holding company.
+# The current ticker maps to the new CIK, which lacks the older 10-K filings.
+EXTRA_CIKS: dict[str, list[str]] = {
+    "XOM": ["0000034088"],   # Exxon Mobil Corp
+    "BLK": ["0001364742"],   # BlackRock Finance, Inc.
+    "AVGO": ["0001649338"],  # Broadcom Pte. Ltd.
+    "DIS": ["0001001039"],   # TWDC Enterprises 18 Corp.
+}

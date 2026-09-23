@@ -16,7 +16,7 @@ from pathlib import Path
 import httpx
 from dotenv import load_dotenv
 
-from ingest.companies import TICKERS
+from ingest.companies import EXTRA_CIKS, TICKERS
 
 RAW_DIR = Path("data/raw")
 MANIFEST = RAW_DIR / "manifest.jsonl"
@@ -99,7 +99,11 @@ def main() -> None:
                 print(f"{ticker}: no CIK found, skipped")
                 continue
             cik, company = ciks[lookup]
-            filings = ten_k_filings(edgar, cik)[: args.years]
+            filings = []
+            for c in [cik, *EXTRA_CIKS.get(ticker, [])]:
+                filings += [{**f, "cik": c} for f in ten_k_filings(edgar, c)]
+            filings.sort(key=lambda f: f["filing_date"], reverse=True)
+            filings = filings[: args.years]
             new = 0
             for f in filings:
                 if f["accession_no"] in done:
@@ -107,7 +111,7 @@ def main() -> None:
                 fiscal_year = int((f["report_date"] or f["filing_date"])[:4])
                 acc = f["accession_no"].replace("-", "")
                 url = (
-                    f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc}/"
+                    f"https://www.sec.gov/Archives/edgar/data/{int(f['cik'])}/{acc}/"
                     f"{f['primary_document']}"
                 )
                 path = RAW_DIR / ticker / f"{fiscal_year}_{f['accession_no']}.htm"
@@ -119,7 +123,6 @@ def main() -> None:
                     continue
                 record = {
                     "ticker": ticker,
-                    "cik": cik,
                     "company": company,
                     "fiscal_year": fiscal_year,
                     **f,
