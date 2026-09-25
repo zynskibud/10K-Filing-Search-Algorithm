@@ -486,6 +486,7 @@
     <tr><td>Parallel work</td><td>Tasks with no dependency between them run at the same time, in the same wave.</td></tr>
     <tr><td>Git</td><td>One commit per task on <code>dev</code>. Nothing on <code>main</code> until the final report.</td></tr>
     <tr><td>Compute</td><td>Embedding and Qwen runs take hours. They run in the background, with a timed sample first and an ETA before the full run.</td></tr>
+    <tr><td>Heavy lock</td><td>Waves 4 to 8 run only through <code>scripts/run.sh &lt;wave&gt;</code>, which runs the preflight, takes the machine's heavy lock, runs the wave detached under <code>caffeinate</code>, and releases the lock on exit. See <code>docs/RUNBOOK.md</code>. Each heavy wave waits for the coordinator's GO.</td></tr>
     <tr><td>Reports</td><td>Each gate report has: what exists (files), what the checks showed (numbers), what it means, and what is open.</td></tr>
   </table>
 
