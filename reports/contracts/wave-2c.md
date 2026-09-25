@@ -8,10 +8,10 @@ Implementer: Sonnet subagent. Depends on: wave 2a (prose parser), wave 2b (table
 - No commits.
 
 ## Deliverables
-1. **Join.** `parse_filing(path, meta)` cleans, splits pages, extracts tables (2b), unwraps layout tables into prose, detects Items and sections (2a), inserts `[Table: id]` placeholders at the table positions with `position` set, assigns `section_id` and `item` to each table, computes coverage over prose + table text, and runs all checks. Reads `.htm` and `.htm.gz`.
+1. **Join.** `parse_filing(path, meta)` cleans, splits pages, extracts tables (2b; note `extract_tables(tree, page_of)` returns a dict with keys `tables`, `layout_tables`, `xbrl_nonfraction_total`, `xbrl_nonfraction_matched`, and each table carries its lxml element for placement), unwraps layout tables into prose, detects Items and sections (2a), inserts `[Table: id]` placeholders at the table positions with `position` set, assigns `section_id` and `item` to each table, computes coverage over prose + table text, and runs all checks. Reads `.htm` and `.htm.gz`.
 2. **Checks** (`checks.py`), each returning pass/fail with a detail string. The prose checks from 2a, plus:
-   - `xbrl_coverage`: matched / total `ix:nonFraction` values >= 0.85 (threshold may be tuned from the 2b report; record the final value).
-   - `table_count_range`: data tables between 15 and 900.
+   - `xbrl_in_table_coverage`: among `ix:nonFraction` values that sit inside a data table, the share matched to a parsed cell >= 0.98 (wave 2b measured 0.99998 on the sample). Also record, as stats only, the document-level share (matched / all tagged values; about 0.82 on the sample, because about 22% of tagged values are in prose and 4% in narrow layout tables).
+   - `table_count_range`: data tables between 5 and 900 (wave 2b measured 8 to 134 on the sample).
    - `placeholders_consistent`: every table id in `tables[]` appears exactly once as a placeholder in some section text, and vice versa.
    - `no_empty_sections`: no section text under 50 characters (after placeholders are excluded) unless the Item status is not `present`.
 3. **Run.** `uv run python -m citation_rag.parse.run --manifest data/raw/manifest.jsonl --out data/parsed --workers 4`. Writes one JSON per filing. Filings that fail any check are still written (with `checks.passed = false`) and also listed in `data/parse_failures.jsonl` with `accession_no`, `company`, `filer_category`, and the failure list. Resumable: skip filings whose JSON exists unless `--force`.
