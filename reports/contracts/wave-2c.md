@@ -14,7 +14,7 @@ Implementer: Sonnet subagent. Depends on: wave 2a (prose parser), wave 2b (table
    - `table_count_range`: data tables between 5 and 900 (wave 2b measured 8 to 134 on the sample).
    - `placeholders_consistent`: every table id in `tables[]` appears exactly once as a placeholder in some section text, and vice versa.
    - `no_empty_sections`: no section text under 50 characters (after placeholders are excluded) unless the Item status is not `present`.
-3. **Run.** `uv run python -m citation_rag.parse.run --manifest data/raw/corpus.jsonl --out data/parsed --workers 4` (the 1,100-filing corpus, not the 1,350-row manifest)``. Writes one JSON per filing. Filings that fail any check are still written (with `checks.passed = false`) and also listed in `data/parse_failures.jsonl` with `accession_no`, `company`, `filer_category`, and the failure list. Resumable: skip filings whose JSON exists unless `--force`.
+3. **Run.** `uv run python -m citation_rag.parse.run --manifest data/raw/corpus.jsonl --out data/parsed --workers 4` (the 1,100-filing corpus, not the 1,350-row manifest). Writes one JSON per filing. Filings that fail any check are still written (with `checks.passed = false`) and also listed in `data/parse_failures.jsonl` with `accession_no`, `company`, `filer_category`, and the failure list. Resumable: skip filings whose JSON exists unless `--force`.
 4. **Quality report** `reports/wave-2c.md`:
    - pass rate; failures grouped by check with counts and 3 example accession numbers each;
    - distributions: pages per filing, page-label coverage, sections per Item (1A, 7, 8), Item character sizes (p10/p50/p90), data tables per filing, xbrl coverage;
