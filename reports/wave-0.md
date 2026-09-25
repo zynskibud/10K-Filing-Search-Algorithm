@@ -93,3 +93,10 @@ Tests failed: 0
 - Postgres container is running and accessible at localhost:5433
 - Models are loaded on CPU for smoke tests as specified
 - Docker memory limit verified at 2147483648 bytes (2 GB)
+
+## Orchestrator corrections (after review)
+
+- The model download pulled every weight format (PyTorch, ONNX, safetensors) and kept `blobs/` copies. Cache was 16 GB. Removed ONNX and duplicate weights and the `blobs/` and `xet/` folders. Cache is now 4.4 GB: bge-m3 2.1 GB, bge-reranker-v2-m3 2.1 GB, bge-small 0.13 GB (plus tokenizer files).
+- The first download attempt wrote 7.3 GB into `~/.cache/huggingface/hub` (outside the project). Deleted only the files created during wave 0 (17:00 or later on 2026-09-25) and the three `models--BAAI--*` folders there. The user's earlier files (whisper, 1.6 GB, 14:26) were kept.
+- `scripts/smoke.py` did not read `.env`, so `HF_HOME` was unset outside the subagent's shell and the loaders fell back to the home cache. Fixed: the script loads `.env` first, sets `HF_HUB_OFFLINE=1`, and asserts that `HF_HOME` is an absolute path inside the project.
+- Re-run: 9 of 9 PASS, offline. Free disk after cleanup: 33 GB.

@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Citation RAG Plan</title>
+<style>
+  :root {
+    --bg: #fbfaf7; --fg: #1f1f1f; --muted: #6b6b6b; --line: #e3e0d8;
+    --card: #ffffff; --accent: #2f5d8a; --empty: #a0a0a0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #16171a; --fg: #e8e6e1; --muted: #9a9892; --line: #2c2d31;
+            --card: #1d1e22; --accent: #8fb4dc; --empty: #6a6a6a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 16px 96px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 40px; }
+  h2 { font-size: 19px; margin: 40px 0 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+  h2 .n { color: var(--accent); margin-right: 8px; }
+  ul { padding-left: 20px; margin: 8px 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px; }
+  .empty { color: var(--empty); font-style: italic; }
+  dt { font-weight: 600; margin-top: 12px; }
+  dd { margin: 2px 0 0; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 0 0 32px; }
+  .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted);
+                 font: inherit; font-weight: 600; padding: 10px 14px; cursor: pointer; margin-bottom: -1px; }
+  .tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab { display: none; }
+  .tab.active { display: block; }
+  .tab h2:first-of-type { border-top: 0; margin-top: 8px; padding-top: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .diagram { width: 100%; height: auto; display: block; margin: 16px 0; }
+  .diagram text { font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: var(--fg); }
+  .diagram .lbl { fill: var(--muted); font-size: 11px; }
+  .diagram .box { fill: var(--card); stroke: var(--line); stroke-width: 1.2; }
+  .diagram .model { fill: var(--card); stroke: var(--accent); stroke-width: 1.6; }
+  .diagram .arrow { stroke: var(--muted); stroke-width: 1.4; fill: none; marker-end: url(#head); }
+  .diagram .phase { fill: var(--accent); font-weight: 600; }
+  .callout { border-left: 3px solid var(--accent); padding: 4px 16px; margin: 16px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Project 1: Production RAG with citations</h1>
+  <p class="sub">Written together, one section at a time, before any code.</p>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-btn-system" aria-selected="true" aria-controls="tab-system" onclick="showTab('system')">System</button>
+    <button role="tab" id="tab-btn-plan" aria-selected="false" aria-controls="tab-plan" onclick="showTab('plan')">Plan</button>
+    <button role="tab" id="tab-btn-build" aria-selected="false" aria-controls="tab-build" onclick="showTab('build')">Build</button>
+  </div>
+
+  <section id="tab-system" class="tab active" role="tabpanel">
+  <h2>How the system works</h2>
+  <div class="callout">The LLM does not search, and it does not choose anything. Our code does the search. The LLM only writes the answer from the chunks that our code gives it.</div>
+
+  <h2>Three models, three jobs</h2>
+  <table>
+    <tr><th>Model</th><th>Job</th><th>When it runs</th></tr>
+    <tr><td>Embedding model (<code>bge-small</code>, <code>bge-m3</code>)</td><td>Turns text into a vector</td><td>Ingestion: every chunk. Question time: the question.</td></tr>
+    <tr><td>Reranker (<code>bge-reranker-v2-m3</code>)</td><td>Scores how well a chunk answers the question</td><td>Question time, on 50 chunks</td></tr>
+    <tr><td>LLM (Qwen3 8B)</td><td>Writes the answer from the chunks it is given. At ingestion, writes a context line per chunk and table summaries.</td><td>Ingestion: once per chunk, on a subset. Question time: one small call before search (company names), and one call to write the answer.</td></tr>
+  </table>
+
+  <h2>Diagram</h2>
+  <svg class="diagram" viewBox="0 0 720 560" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Two phases: ingestion builds the index once; each question runs search, rerank, then the LLM.">
+    <defs><marker id="head" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#8a8a8a"/></marker></defs>
+
+    <text x="16" y="24" class="phase">Phase 1: Ingestion. Runs once.</text>
+    <rect x="16" y="40" width="112" height="44" rx="6" class="box"/><text x="72" y="66" text-anchor="middle">1,000 filings</text>
+    <path d="M128,62 L150,62" class="arrow"/>
+    <rect x="152" y="40" width="112" height="44" rx="6" class="box"/><text x="208" y="58" text-anchor="middle">Parse</text><text x="208" y="74" text-anchor="middle" class="lbl">Items, sections, tables</text>
+    <path d="M264,62 L286,62" class="arrow"/>
+    <rect x="288" y="40" width="112" height="44" rx="6" class="box"/><text x="344" y="58" text-anchor="middle">Chunk</text><text x="344" y="74" text-anchor="middle" class="lbl">about 400 tokens</text>
+    <path d="M400,62 L422,62" class="arrow"/>
+    <rect x="424" y="40" width="112" height="44" rx="6" class="model"/><text x="480" y="58" text-anchor="middle">LLM: context line</text><text x="480" y="74" text-anchor="middle" class="lbl">per chunk, subset only</text>
+    <path d="M536,62 L558,62" class="arrow"/>
+    <rect x="560" y="40" width="112" height="44" rx="6" class="model"/><text x="616" y="58" text-anchor="middle">Embedding model</text><text x="616" y="74" text-anchor="middle" class="lbl">chunk to vector</text>
+    <path d="M616,84 L616,116" class="arrow"/>
+    <rect x="404" y="118" width="300" height="56" rx="6" class="box"/>
+    <text x="554" y="140" text-anchor="middle">Postgres</text>
+    <text x="554" y="158" text-anchor="middle" class="lbl">chunk text, vector (HNSW), page, section, company</text>
+    <path d="M344,84 L344,146 L402,146" class="arrow"/>
+    <text x="396" y="196" text-anchor="end" class="lbl">BM25 word index is built from the same chunk text</text>
+
+    <line x1="16" y1="204" x2="704" y2="204" stroke="#8a8a8a" stroke-dasharray="4 4"/>
+
+    <text x="16" y="232" class="phase">Phase 2: One question. Our code runs every step.</text>
+    <rect x="16" y="248" width="150" height="44" rx="6" class="box"/><text x="91" y="274" text-anchor="middle">Question</text>
+    <path d="M166,270 L198,270" class="arrow"/>
+    <rect x="200" y="248" width="150" height="44" rx="6" class="model"/><text x="275" y="266" text-anchor="middle">LLM: company router</text><text x="275" y="282" text-anchor="middle" class="lbl">names, or "general"</text>
+    <path d="M350,270 L382,270" class="arrow"/>
+    <rect x="384" y="248" width="150" height="44" rx="6" class="model"/><text x="459" y="266" text-anchor="middle">Embedding model</text><text x="459" y="282" text-anchor="middle" class="lbl">question to vector</text>
+
+    <path d="M459,292 L459,318" class="arrow"/>
+    <rect x="384" y="320" width="150" height="44" rx="6" class="box"/><text x="459" y="338" text-anchor="middle">Vector search</text><text x="459" y="354" text-anchor="middle" class="lbl">top 50 by meaning</text>
+    <path d="M91,292 L91,342 L198,342" class="arrow"/>
+    <rect x="200" y="320" width="150" height="44" rx="6" class="box"/><text x="275" y="338" text-anchor="middle">BM25 search</text><text x="275" y="354" text-anchor="middle" class="lbl">top 50 by words</text>
+
+    <path d="M275,364 L275,390 L318,390" class="arrow"/>
+    <path d="M459,364 L459,390 L416,390" class="arrow"/>
+    <rect x="320" y="372" width="94" height="36" rx="6" class="box"/><text x="367" y="394" text-anchor="middle">RRF merge</text>
+    <rect x="186" y="296" width="500" height="196" rx="8" fill="none" stroke="var(--accent)" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="196" y="311" class="lbl" style="fill:var(--accent)">Runs once per named company, budget per company. Results are merged.</text>
+    <path d="M367,408 L367,434" class="arrow"/>
+    <rect x="292" y="436" width="150" height="44" rx="6" class="model"/><text x="367" y="454" text-anchor="middle">Reranker</text><text x="367" y="470" text-anchor="middle" class="lbl">50 in, top 8 out</text>
+    <path d="M442,458 L474,458" class="arrow"/>
+    <rect x="476" y="436" width="196" height="44" rx="6" class="box"/><text x="574" y="454" text-anchor="middle">Parent sections</text><text x="574" y="470" text-anchor="middle" class="lbl">small-to-big, up to 20k tokens</text>
+    <path d="M574,480 L574,506" class="arrow"/>
+    <rect x="476" y="508" width="196" height="44" rx="6" class="model"/><text x="574" y="526" text-anchor="middle">LLM: write the answer</text><text x="574" y="542" text-anchor="middle" class="lbl">only from the text, with citations</text>
+    <path d="M474,530 L442,530" class="arrow"/>
+    <rect x="292" y="508" width="150" height="44" rx="6" class="box"/><text x="367" y="526" text-anchor="middle">Citation check</text><text x="367" y="542" text-anchor="middle" class="lbl">quote is in the chunk</text>
+  </svg>
+
+  <h2>Phase 1: ingestion, once, before any question</h2>
+  <ol>
+    <li>Download 1,000 filings.</li>
+    <li>Parse each one into Items, sections, pages, and tables. Tables become their own chunks, and the prose keeps a placeholder that points to each table.</li>
+    <li>Cut the sections into chunks of about 400 tokens.</li>
+    <li>Add the prefix to each chunk: <code>Acme Corp | FY2025 | Item 1A | Supply chain risk</code>.</li>
+    <li>Contextual retrieval: ask the LLM to write one or two sentences that say what the chunk is about, in the context of its filing, and put them after the prefix. Table summaries (option 3) are the same kind of step. This is the only LLM work in phase 1. It is one call per chunk, so it runs on a subset. Nothing changes at question time: the chunks are only better described.</li>
+    <li>Send each chunk to the embedding model. It returns a vector. This is where every embedding comes from. The LLM never makes one.</li>
+    <li>Store each chunk in Postgres: text, vector, page, section, company.</li>
+    <li>Build the BM25 word index from the same chunk texts. BM25 uses words only, and no vectors.</li>
+  </ol>
+
+  <h2>Phase 2: one question</h2>
+  <p>The user asks: "What did Acme say about tariffs on Vietnam?"</p>
+  <ol>
+    <li><strong>Company router.</strong> Our code asks the LLM one small question: which companies does this name? Answer: Acme. Search is filtered to Acme's filing. If the router names several companies, steps 3 to 6 run once per company, with a budget per company, and the results are merged before step 7. If it returns "general", the search runs across all filings with a cap per company.</li>
+    <li><strong>Embed the question.</strong> The embedding model turns the question into a vector.</li>
+    <li><strong>Vector search.</strong> Postgres finds the 50 chunk vectors closest to the question vector.</li>
+    <li><strong>BM25 search.</strong> The 50 chunks with the best word match for "tariffs" and "Vietnam".</li>
+    <li><strong>RRF merge.</strong> The two lists become one, by rank: <code>1 / (60 + rank)</code> summed over both lists.</li>
+    <li><strong>Rerank.</strong> The reranker reads the question with each of the 50 chunks and scores them. Keep the top 8.</li>
+    <li><strong>Parents.</strong> Look up the section of each of the 8 chunks. This is small-to-big.</li>
+    <li><strong>Prompt.</strong> Our code builds one prompt: the instruction, the sections with their chunk IDs and pages, and the question.</li>
+    <li><strong>LLM.</strong> Qwen reads the prompt and writes the answer with citations. This is the first time the LLM sees the question in full.</li>
+    <li><strong>Check.</strong> Our code checks that each cited chunk exists and that the quote is in it. Then it shows the answer.</li>
+  </ol>
+
+  <h2>Where the "understanding" happens</h2>
+  <ul>
+    <li>Before the search, the embedding model reads the meaning of the question. It is a small model with no reasoning, but it does read meaning. That is why "tariffs on Vietnam" can match "trade duties on Southeast Asian imports".</li>
+    <li>The LLM reads the question in full only in the final prompt, together with the retrieved text.</li>
+    <li>The LLM makes no decisions about how to search in project 1. Query rewriting, judging the results, and searching again are project 2, the self-correcting RAG.</li>
+  </ul>
+
+  <h2>What we test</h2>
+  <p>Each box in the diagram is a choice, and the plan tests the choices one at a time, with the same questions: how to chunk, which embedding model, which search method, which reranker, how to handle tables, how to describe chunks, and how the LLM answers with and without retrieval.</p>
+
+  <h2>Limits of project 1, and what project 2 adds</h2>
+  <p>Project 1 embeds the question as written and searches once (once per named company). The LLM makes no decision about how to search. Project 2 is a different architecture: the LLM reads the question first, plans the searches, checks the results, and tries again. These are the cases that project 1 cannot handle.</p>
+  <table>
+    <tr><th>Project 1 cannot handle</th><th>Why</th><th>Project 2 adds</th></tr>
+    <tr><td>Multi-part or paragraph-length questions</td><td>One vector for several topics matches nothing well</td><td>Query decomposition: split into simple questions, search each one</td></tr>
+    <tr><td>Several lookups in one filing ("which segment grew fastest, and why?")</td><td>One search finds one thing</td><td>Decomposition plus several searches</td></tr>
+    <tr><td>Vague questions ("how did they do?")</td><td>The embedding matches the words as written</td><td>Query rewriting, with clarification</td></tr>
+    <tr><td>Bad results</td><td>Nothing checks the retrieved chunks</td><td>A critique step that grades the chunks</td></tr>
+    <tr><td>Empty results for one company</td><td>Nothing tries again</td><td>Retry with a different query, or a web fallback</td></tr>
+    <tr><td>Complete answers to "which companies mention X"</td><td>Search returns the best 50 chunks, not every match</td><td>Not fixed by project 2 either. It needs a scan of every filing, not a search.</td></tr>
+  </table>
+  <p>The golden set includes about 10 multi-part questions. Project 1 is expected to score low on them. That score is the baseline that project 2 must beat.</p>
+  </section>
+
+  <section id="tab-plan" class="tab" role="tabpanel">
+  <p class="sub">The section order is the build and experiment order.</p>
+
+  <h2><span class="n">0</span>Requirements (from AI-ENGINEER-PROJECTS-UNIQUE.md)</h2>
+  <div class="card">
+    <ul>
+      <li>Ingest 1000+ documents.</li>
+      <li>Compare three chunking strategies on the eval harness.</li>
+      <li>BM25, vector search, then hybrid fusion of the two.</li>
+      <li>Cross-encoder reranking. Answer: does it help, and by how much?</li>
+      <li>Citations that point back to real page numbers.</li>
+      <li>Beat the prompting baseline or explain why not.</li>
+      <li>About 300 lines of your own code. No LangChain, no LlamaIndex.</li>
+      <li>Stack: LangGraph, SQLite-vec, cross-encoder. Decided: Postgres with pgvector instead of SQLite-vec. LangGraph is used only at the end, for the framework comparison (section 12).</li>
+      <li>Grounding: answers use only the retrieved text.</li>
+    </ul>
+  </div>
+
+  <h2><span class="n">1</span>Goal</h2>
+  <ul>
+    <li>Build a RAG system over SEC 10-K filings that answers with citations to real pages.</li>
+    <li>Test different methods for chunking, search, and reranking, and measure each one on the eval harness.</li>
+    <li>Learn each concept while building it.</li>
+  </ul>
+
+  <h2><span class="n">2</span>Corpus</h2>
+  <ul>
+    <li>SEC 10-K filings from EDGAR, 1,000+ filings.</li>
+    <li><strong>Design:</strong> 1,000+ different companies, one filing each, all filed after the LLM's training cutoff. The LLM cannot know these filings from training.</li>
+    <li><strong>Supply:</strong> about 7,000 10-K filings were filed from July 2025 to September 2026 (2025 Q3: 392, Q4: 363, 2026 Q1: 5,387, Q2: 621, Q3 so far: 280).</li>
+    <li><strong>Cost:</strong> one year per company, so no questions that compare years.</li>
+    <li><strong>Sample:</strong> 1,000+ companies picked at random from the filings after the start date.</li>
+    <li><strong>Filer rule:</strong> include every filer whose 10-K follows the standard Item list, including smaller reporting companies. Exclude filers whose 10-K uses a different Item list, for example asset-backed securities issuers.</li>
+    <li><strong>Start date:</strong> filings filed from July 2025, after the Qwen3 training cutoff (section 11).</li>
+    <li>Source format: inline XBRL HTML. All filings from July 2025 on use it, so the parser needs one cleaning path.</li>
+    <li>No PDFs. The embedding model reads text only, and HTML keeps headings and tables that a PDF loses.</li>
+    <li>Page numbers come from the page breaks in the HTML.</li>
+    <li>Not included: FinanceBench.</li>
+  </ul>
+
+  <h2><span class="n">3</span>Ingestion and parsing: standardization</h2>
+  <p>The SEC files do not arrive in one format. The parser normalizes each filing into one standard structure. The standard is the SEC Form 10-K Item list. After this step, the rest of the system never sees HTML differences between companies.</p>
+  <div class="card">
+<pre style="margin:0;white-space:pre-wrap">filing
+  company, ticker, fiscal_year, accession_no, source_url
+  items
+    item: "1A", title: "Risk Factors"
+      sections
+        title, page_start, page_end, text</pre>
+  </div>
+  <p><strong>Cases the parser must handle</strong></p>
+  <ul>
+    <li><strong>Page numbers in different places</strong> (footer, header, number first or last). The output always has <code>page_start</code> and <code>page_end</code>.</li>
+    <li><strong>Integrated annual reports</strong> with no <code>Item</code> headings, mostly large banks. Map sections to Items with the cross-reference index.</li>
+    <li><strong>Combined Items</strong>, for example "Items 7. and 7A.". Decided: split the text into separate Items, so every filing has the same Item structure.</li>
+    <li><strong>Items incorporated by reference</strong> (usually 10 to 14). Keep the sentence and flag the Item.</li>
+    <li><strong>Items that smaller reporting companies can omit</strong> (for example 1A, 6, 7A). Record the Item as "not required". This is correct, not an error.</li>
+  </ul>
+  <p><strong>Tables</strong></p>
+  <p>Tables are parsed apart from prose. HTML gives the grid directly: <code>&lt;table&gt;</code>, <code>&lt;tr&gt;</code>, <code>&lt;td&gt;</code>. For each table:</p>
+  <ol>
+    <li><strong>Layout or data.</strong> A data table has at least 2 columns, at least 3 rows, and several numeric cells. A layout table (for example a one-column bullet list) is unwrapped into prose.</li>
+    <li><strong>Title and units.</strong> The nearest heading or bold line above the table, plus the unit line, for example "(in millions, except per share data)".</li>
+    <li><strong>Header rows.</strong> Multi-level headers with merged cells are flattened to one label per column.</li>
+    <li><strong>Body rows.</strong> The first cell is the row label. Split number cells (<code>$</code>, <code>1,204</code>, <code>)</code>) are merged into one number. Parentheses mean negative. Indentation gives the row hierarchy.</li>
+    <li><strong>Two forms stored.</strong> Structured JSON (title, units, headers, rows) for the LLM and the viewer. A text form for embedding and BM25, for example <code>Net revenue | 2025: 1,204 | 2024: 1,090</code>.</li>
+    <li><strong>Placeholder in the prose.</strong> The table's place in the section text gets a line such as <code>[Table: Consolidated Statements of Operations]</code>. The table chunk stores its section and position, so both link to each other.</li>
+    <li><strong>Page</strong> from the page break that the table sits in.</li>
+  </ol>
+  <p><strong>Checks on every filing</strong></p>
+  <ul>
+    <li>Required Items are present. Items that the filer can omit do not count as missing.</li>
+    <li>Every number tagged with <code>ix:nonFraction</code> in the inline XBRL appears in a parsed table cell. This is exact ground truth from the filing itself.</li>
+    <li>The count of data tables is in a normal range.</li>
+    <li>Items follow SEC order, or are mapped through the cross-reference index.</li>
+    <li>Each Item has a normal size.</li>
+    <li>No text is lost or counted twice.</li>
+  </ul>
+  <p>A filing that fails a check is not indexed. It goes on a failure list with the reason.</p>
+
+  <h2><span class="n">4</span>Eval harness and metrics</h2>
+  <p>Four parts: golden set, metrics, runner (one command), results log (every run saved).</p>
+
+  <p><strong>Golden set</strong></p>
+  <ul>
+    <li>100 to 150 questions, split into a development set (about 100) and a test set (about 50). The development set chooses the winners. The test set runs one time, at the end, on the final system only.</li>
+    <li>Written by a subagent that reads the filings. Every question must have one definitive answer in the filing.</li>
+    <li>Each case: question, filing, evidence text, Item, page, reference answer, question type.</li>
+    <li>A hit is a retrieved chunk that contains at least 80% of the evidence text. Not a chunk ID, because each of the 7 chunking strategies makes different chunks. The partial match covers evidence that a fixed-size cut splits in two.</li>
+    <li>Chunk sizes differ, so strategies are compared at the same number of retrieved tokens (for example 2,000), not only at the same k. A large chunk contains more evidence only because it is larger.</li>
+    <li>Question types: fact lookup, number from a table, paraphrased, exact term, general (across companies), unanswerable, and multi-part (about 10 questions, expected to fail in project 1, the baseline for project 2).</li>
+    <li>Every retrieval score is reported for prose questions and table questions apart. The chunking comparison (section 5) needs this split for its sanity check.</li>
+  </ul>
+
+  <p><strong>Metrics</strong></p>
+  <table>
+    <tr><th align="left">Metric</th><th align="left">Checked by</th></tr>
+    <tr><td>Recall@k, MRR</td><td>Code. Deterministic.</td></tr>
+    <tr><td>Quote is in the cited chunk</td><td>Code. Exact text match.</td></tr>
+    <tr><td>Numeric answers</td><td>Code, after the number is normalized. LLM judge if code cannot parse it.</td></tr>
+    <tr><td>Correctness</td><td>LLM judge</td></tr>
+    <tr><td>Faithfulness</td><td>LLM judge, claim by claim</td></tr>
+    <tr><td>Citation support</td><td>LLM judge, citation by citation</td></tr>
+    <tr><td>Refusal on unanswerable questions</td><td>LLM judge</td></tr>
+    <tr><td>Time and tokens per question</td><td>Code</td></tr>
+  </table>
+  <p><strong>Confidence intervals:</strong> every score is reported with a 95% bootstrap confidence interval, for example "72% &plusmn; 2". To compare two configurations: draw the same number of questions at random from the set, with repeats allowed, compute the difference, and repeat 1,000 times. The middle 95% of the differences is the interval. If the interval includes 0, the two configurations are not different.</p>
+
+  <p><strong>LLM judge design</strong></p>
+  <ol>
+    <li><strong>Code first.</strong> Use the judge only for what code cannot check.</li>
+    <li><strong>One judgment per call.</strong> Separate prompts for correctness, faithfulness, citation support, and refusal.</li>
+    <li><strong>Labels, not scores.</strong> For example correct / partial / incorrect, each with a written definition. No 1 to 10 scales.</li>
+    <li><strong>Reason before label.</strong> The judge writes a short reason, then the label, as structured JSON.</li>
+    <li><strong>Faithfulness by claims.</strong> Split the answer into claims. Check each claim against the retrieved text. Score = supported claims / all claims.</li>
+    <li><strong>Different model from the answer model.</strong> A model tends to prefer its own writing. Decided: gpt-oss-20b (OpenAI family, 21B, local through Ollama, free) judges Qwen3 8B, for all four judgments. Fallback if calibration fails: Claude Haiku 4.5 for correctness and refusals only, which costs a few cents per run.</li>
+    <li><strong>Fixed settings.</strong> Temperature 0, a versioned prompt, and the judge version saved with every result.</li>
+    <li><strong>Calibration.</strong> A person labels a sample of answers. Measure agreement with the judge. Fix the prompt until agreement is high. Keep a separate held-out sample to confirm, so the prompt does not overfit.</li>
+    <li><strong>Consistency check.</strong> Run the judge 3 times on a subset. Labels that change between runs show an unclear rubric.</li>
+  </ol>
+  <p><strong>Human checks (agreed):</strong> you label about 40 answers to calibrate the judge, and you spot-check about 15 of the subagent's questions.</p>
+
+  <h2><span class="n">5</span>Chunking (three strategies)</h2>
+  <p>Only the section level is chunked. Items and documents are too large to embed well: <code>bge-small</code> reads 512 tokens and <code>bge-m3</code> reads 8,192, and one vector for a long text averages many topics.</p>
+  <table>
+    <tr><th align="left">Level</th><th align="left">Role</th></tr>
+    <tr><td>Chunk (inside one section)</td><td>The unit that we embed and search.</td></tr>
+    <tr><td>Section</td><td>The parent. Small-to-big sends it to the LLM for context.</td></tr>
+    <tr><td>Item</td><td>A filter and a citation field.</td></tr>
+    <tr><td>Document</td><td>A filter (company, year) and a citation field.</td></tr>
+  </table>
+  <p><strong>Strategies to compare.</strong> Strategies 1 to 3 produce chunks of about 400 tokens. Strategy 4 needs a long-input embedding model.</p>
+  <ol>
+    <li><strong>Fixed size, no structure (baseline).</strong> Cut every 400 tokens. Ignore sections and Items.</li>
+    <li><strong>Fixed size inside sections.</strong> Cut every 400 tokens, never across a section boundary.</li>
+    <li><strong>Paragraph-based inside sections.</strong> Join whole paragraphs up to about 400 tokens. Never cut inside a paragraph or across a section.</li>
+    <li><strong>Whole section as one chunk.</strong> One chunk per section, up to 8,192 tokens. <code>bge-m3</code> only.</li>
+  </ol>
+  <table>
+    <tr><th align="left">Strategy</th><th align="left"><code>bge-small</code></th><th align="left"><code>bge-m3</code></th></tr>
+    <tr><td>1. Fixed size, no structure</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>2. Fixed size inside sections</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>3. Paragraph-based inside sections</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>4. Whole section as one chunk</td><td>Not possible</td><td>Yes</td></tr>
+  </table>
+  <p>7 indexes in total.</p>
+  <p><strong>Token ruler:</strong> chunk sizes are measured with the <code>bge-small</code> tokenizer, which has the tighter limit (512). A chunk that fits <code>bge-small</code> also fits <code>bge-m3</code>. Both models embed the same chunk texts, and each model splits the text with its own tokenizer when it reads it. Only the model changes between the two rows.<br><em>Trade-off to note:</em> the chunk sizes are set for <code>bge-small</code>, not optimized for <code>bge-m3</code>. Strategy 4 is the only test of long inputs for <code>bge-m3</code>.</p>
+  <p><strong>Tables are a separate axis.</strong> Tables are pulled out of the prose before chunking (section 3), so the chunking strategies cut prose only. If tables stayed in the prose, each strategy would cut them in a different way, and the chunking scores would mix two effects. The parent section keeps the table in its original place, so the LLM still sees prose and table together.</p>
+  <p><strong>How search sees tables:</strong> the prose chunk holds a placeholder that points to the table. The table chunk is a separate, searchable chunk. The parent section holds both in the original order, and it is what the LLM reads. Search runs on both kinds of chunk.</p>
+  <p><strong>Step 1, chunking comparison (the 7 indexes):</strong> prose chunks by strategy. Table chunks use one fixed default: embed the title, units, row labels, and column labels (option 2 below). Scores are reported for prose questions and table questions apart. Table-question scores must be about equal across strategies. If they differ, the axes interact, and the affected cells are tested in full.</p>
+  <p><strong>Step 2, table comparison</strong>, on the winning strategy and model, measured on the table questions:</p>
+  <ol start="0">
+    <li><strong>Pointer only (baseline).</strong> The table is not indexed. It reaches the LLM only through the parent of a prose chunk that points to it. This tests whether direct search of tables helps at all.</li>
+    <li><strong>Back in the flow.</strong> The table text rows are merged back into the prose chunks of the winning strategy.</li>
+    <li><strong>Own chunk, labels only.</strong> Embed the title, units, row labels, and column labels. Send the full table to the LLM.</li>
+    <li><strong>Own chunk, summary.</strong> Embed a short LLM-written summary of the table. Send the full table to the LLM. Slow: about 100 summaries per filing with Qwen on the Mac. Run it on a subset: the filings that the table questions point to, plus a random sample of the same size. Options 1 and 2 are measured on the same subset for a fair comparison.</li>
+  </ol>
+  <p>In all options, a table larger than the chunk limit is split by rows, and each part repeats the title and header row. Prose chunks and their vectors are reused between the two steps, because only the table chunks change.</p>
+  <p><strong>Context prefix:</strong> before embedding, add <code>Company | FY | Item | section title</code> to the front of each chunk. Without it, a chunk does not say which company or section it is from. The stored chunk text stays clean, so citations quote only the filing text. This metadata prefix is the default in steps 1 and 2.</p>
+  <p><strong>Step 3, contextual retrieval</strong>, on the winning strategy, model, and table option. At ingestion, the LLM writes one or two sentences per chunk that say what the chunk is about in the context of its filing. The sentences go after the metadata prefix, and the chunk with its context goes into both the vector index and the BM25 index. Nothing changes at question time. Compare three prefixes on the same subset of filings (the filings that the questions point to, plus a random sample of the same size):</p>
+  <table>
+    <tr><th>Prefix</th><th>Cost</th></tr>
+    <tr><td>None</td><td>Free</td></tr>
+    <tr><td>Metadata: company, FY, Item, section title</td><td>Free</td></tr>
+    <tr><td>Metadata plus LLM-written context</td><td>One LLM call per chunk. Subset only.</td></tr>
+  </table>
+  <p>Question that the comparison answers: how much does a description of the chunk help each search method?</p>
+  <p>Questions that the comparison answers:</p>
+  <ul>
+    <li>Does the SEC structure help retrieval, and by how much? (Strategies 1, 2, 3.)</li>
+    <li>Is one vector for a full section worse than several small vectors? (Strategy 4 against 2 and 3.)</li>
+  </ul>
+
+  <h2><span class="n">6</span>Embeddings</h2>
+  <p>An embedding model turns text into a vector. Texts with similar meaning get vectors that are close together. Search embeds the question and finds the closest chunk vectors. It finds matches in meaning that share no words, which BM25 cannot do.</p>
+  <p>Two local models, one short-input and one long-input:</p>
+  <table>
+    <tr><th align="left">Model</th><th align="left">Size</th><th align="left">Max tokens</th><th align="left">Dimensions</th></tr>
+    <tr><td><code>bge-small-en-v1.5</code></td><td>33M</td><td>512</td><td>384</td></tr>
+    <tr><td><code>bge-m3</code></td><td>570M</td><td>8,192</td><td>1,024</td></tr>
+  </table>
+  <p>Question that the comparison answers: do long inputs help retrieval?</p>
+  <p>Chunk size is set by precision, not only by the model limit: a vector for a long text averages many topics.</p>
+
+  <h2><span class="n">7</span>Storage: Postgres with pgvector</h2>
+  <table>
+    <tr><th align="left">Data</th><th align="left">Place</th></tr>
+    <tr><td>Raw HTML filings</td><td>Files on disk. They never change.</td></tr>
+    <tr><td>Normalized filings (Items, sections, pages)</td><td>JSON files on disk, one per filing. The source of truth. The database is rebuilt from these files.</td></tr>
+    <tr><td>Chunks, vectors, keyword index (7 indexes)</td><td>Postgres with pgvector. About 4 to 5 GB of vectors.</td></tr>
+    <tr><td>Query log</td><td>Postgres</td></tr>
+  </table>
+  <p><strong>Vector index:</strong> HNSW with default build settings (<code>m = 16</code>, <code>ef_construction = 64</code>). Cosine distance (<code>vector_cosine_ops</code>), because both <code>bge</code> models are trained for cosine similarity.</p>
+  <p><strong>Index check:</strong> HNSW is approximate. Compare its results with an exact search in the same database (a query with the index turned off). Try <code>ef_search</code> at 40, 100, and 200, and record recall and speed. Deep index tuning belongs to project 4.</p>
+
+  <h2><span class="n">8</span>Search: BM25, vector, hybrid</h2>
+  <p>Three search methods, tested on the same eval questions:</p>
+  <table>
+    <tr><th align="left">Method</th><th align="left">Kind</th><th align="left">Matches</th><th align="left">Index</th></tr>
+    <tr><td>BM25</td><td>Lexical (sparse)</td><td>Exact words</td><td>Inverted index</td></tr>
+    <tr><td>Vector</td><td>Semantic (dense)</td><td>Meaning</td><td>HNSW</td></tr>
+    <tr><td>Hybrid</td><td>Both</td><td>Both</td><td>Both, then merge</td></tr>
+  </table>
+  <p><strong>BM25 score rules:</strong> term frequency (more occurrences add more, with a smaller gain each time), rarity or IDF (rare words count more), and length (long chunks get a small penalty).</p>
+  <p><strong>Hybrid merge:</strong> Reciprocal Rank Fusion (RRF) over the top 50 of each method.</p>
+  <div class="card"><pre style="margin:0;white-space:pre-wrap">score(chunk) = 1 / (60 + rank in BM25 list) + 1 / (60 + rank in vector list)</pre></div>
+  <p>Question that the comparison answers: what does each method add, and does hybrid beat both?</p>
+  <p><strong>Company routing:</strong> before search, the LLM reads the question and returns structured output: the companies that it names, or "general". Its instructions cover names in different forms (Apple, Apple Inc., AAPL), a company that is not in the corpus (returned with a flag, so the answer can say so), a vague reference ("the iPhone maker"), and no company at all. The eval measures how often the router is right, because a wrong route gives a wrong answer whatever the search does.</p>
+  <p><strong>One search per company:</strong> for each named company, our code runs the same search with the filter set to that company, and keeps a budget per company (for example the top 4 chunks after reranking). The results are merged, and the parent sections of all companies go to the LLM in one prompt. This is a fixed loop in our code. The LLM does not decide to search more than once. That decision belongs to project 2.</p>
+  <p><strong>General questions:</strong> the search runs across all filings, with a cap per company (for example 2 chunks), so one filing cannot fill the list. Limit to state in every such answer: search returns the best 50 chunks, not every match. A question such as "which companies mention X" is answered "among the filings retrieved", not in full.</p>
+  <p><strong>BM25:</strong> in our own Python code, over the chunk text from Postgres. About 30 lines, and every rule is visible.</p>
+
+  <h2><span class="n">9</span>Reranking</h2>
+  <p>Search finds candidates fast. A reranker reorders them with a slower, more accurate model. Pipeline: hybrid search, top 50, then reranker, top 8, then parent sections to the LLM.</p>
+  <p>Bi-encoder (embedding model): embeds question and chunk apart, compares vectors, precomputed, fast. Cross-encoder (reranker): reads question and chunk text together, returns one score, runs per question, slow. Both compare meaning, not only words.</p>
+  <p><strong>Test one reranker from each family:</strong></p>
+  <table>
+    <tr><th align="left">Family</th><th align="left">Candidate</th><th align="left">Note</th></tr>
+    <tr><td>None</td><td>Search order only</td><td>The baseline.</td></tr>
+    <tr><td>Rule-based</td><td>MMR</td><td>Pushes down near-duplicate chunks.</td></tr>
+    <tr><td>Late interaction</td><td>ColBERTv2</td><td>Used as a reranker on the 50 candidates only, so no token-level index for the full corpus.</td></tr>
+    <tr><td>Cross-encoder</td><td><code>bge-reranker-v2-m3</code></td><td>Reads up to 8,192 tokens, so it also works with whole-section chunks.</td></tr>
+    <tr><td>Sequence-to-sequence</td><td>monoT5</td><td>Scores by the probability of "true".</td></tr>
+    <tr><td>LLM reranker</td><td>Listwise, with Qwen3 8B</td><td>Local and free, but the slowest reranker.</td></tr>
+  </table>
+  <p><strong>Scope rule:</strong> run the reranker comparison only on the best index and search method from sections 5, 6, and 8. Testing every reranker on every combination gives 7 &times; 3 &times; 6 = 126 runs.</p>
+  <p><strong>Measure:</strong> retrieval quality (is the correct chunk in the top 8?) and time per question, for each reranker. Answer: does it help, and by how much?</p>
+  <p><strong>Not included:</strong> hosted reranker APIs (Cohere, Voyage, Jina). They cost money and are mostly cross-encoders, which we already test.</p>
+
+  <h2><span class="n">10</span>Answer generation, grounding, and citations</h2>
+  <p>The answer reaches the user in three layers.</p>
+  <ol>
+    <li><strong>Answer with citation markers.</strong> Each claim has a number, for example [1], that points to a source.</li>
+    <li><strong>Citation card.</strong> Company, fiscal year, Item, section title, page, and the exact quote that supports the claim. The quote lets the user check the claim, and lets the system test grounding: if the quote is not in the stored chunk, the citation is wrong.</li>
+    <li><strong>Our own viewer.</strong> A click on a citation opens our page. The page shows the stored section with the quote highlighted, and the page number next to it. A link to the original filing on sec.gov is also on the page.</li>
+  </ol>
+  <p><strong>Answer format:</strong> each citation gives the chunk ID and the exact quote. Code checks that the quote is in that chunk.</p>
+  <p><strong>Answer not in the text:</strong> the model says that the filings do not contain the answer, and gives no citation. It never answers from its own knowledge.</p>
+  <p><strong>Viewer:</strong> the frontend is not a concern now.</p>
+  <div class="card">
+<pre style="margin:0;white-space:pre-wrap">[1] Apple Inc. · 10-K FY2025 · Item 1A Risk Factors · page 14
+    Section: "The Company depends on component and product manufacturing..."
+    Quote:   "Substantially all of the Company's manufacturing is performed..."
+    Open:    viewer · sec.gov</pre>
+  </div>
+
+  <h2><span class="n">11</span>Prompting baseline and model choice</h2>
+  <ul>
+    <li><strong>Small-to-big:</strong> search on small chunks, then send the parent section to the LLM.</li>
+    <li><strong>Context budget:</strong> at most 20,000 tokens of retrieved text per question. Qwen3 8B has 40,960 tokens, and the prompt, thinking, and answer need the rest.</li>
+    <li><strong>Baselines and main runs:</strong>
+      <table>
+        <tr><th align="left">Run</th><th align="left">Model</th><th align="left">Context</th><th align="left">Shows</th></tr>
+        <tr><td>A</td><td>Qwen3 8B</td><td>No documents</td><td>What the small model knows alone</td></tr>
+        <tr><td>B</td><td>Qwen3 8B</td><td>Our RAG system</td><td>The system that we build</td></tr>
+      </table>
+      Run A is the prompting baseline to beat. Haiku runs (no documents, and the full 10-K) are shelved: the full-10-K run costs about $16 per run.
+      A full 10-K does not fit in Qwen3 8B (40,960 tokens), so Qwen gets no full-10-K run.</li>
+    <li><strong>Thinking mode:</strong> every Qwen3 run (A and B) runs twice, with thinking on and with thinking off.</li>
+    <li><strong>Run time:</strong> Qwen3 8B writes about 20 to 30 tokens per second on the Mac. With thinking on, one answer can take about a minute, so one run of 100 questions can take 1 to 2 hours. Embedding with <code>bge-m3</code> is also slow. Time a small sample before each full run.</li>
+        <li><strong>Memorization:</strong> models are trained on public web data, which includes SEC filings. Control this with filings published after the model's training cutoff, and with a no-retrieval run that shows what the model already knows.</li>
+    <li><strong>Answer model:</strong> Qwen3 8B, local through Ollama (<code>qwen3:8b</code>, already installed). Free to run.</li>
+    <li><strong>Training cutoff:</strong> Qwen3 was released in April 2025, so its training data ends before that date. Filings filed from July 2025 are after the cutoff.</li>
+    <li><strong>Judge model:</strong> gpt-oss-20b, local and free. A larger model from a different family judges the smaller model. Haiku 4.5 is the fallback (section 4).</li>
+    <li><strong>API key (for the Haiku fallback):</strong> <code>ANTHROPIC_API_KEY</code> is in <code>.env</code> in the project root. <code>.gitignore</code> lists <code>.env</code>, so Git never commits the key. File mode 600.</li>
+  </ul>
+
+  <h2><span class="n">12</span>Framework and code budget</h2>
+  <p><strong>Why the budget exists:</strong> 300 lines with no framework forces you to write and understand each step yourself. A framework hides retrieval, fusion, and prompting behind calls, so you cannot explain or change them.</p>
+  <p><strong>Two parts of the project:</strong></p>
+  <table>
+    <tr><th align="left">Part</th><th align="left">Contents</th><th align="left">Budget</th></tr>
+    <tr><td>Experiment code</td><td>Parser, the 7 indexes, the three search methods, the six rerankers, the eval harness, the viewer</td><td>No limit</td></tr>
+    <tr><td>Final optimized RAG</td><td>Only the winning choices: one index, one search method, one reranker, answer generation with citations</td><td>300 lines or fewer</td></tr>
+  </table>
+  <p>No LangChain, LangGraph, or LlamaIndex in either part.</p>
+  <p><strong>Framework comparison:</strong> a third part, apart from our own code. Build the same RAG system with a framework, and compare it with our final optimized RAG.</p>
+  <ul>
+    <li><strong>Framework:</strong> LangGraph, built at the very end, after the final optimized RAG.</li>
+    <li><strong>Same inputs:</strong> the same normalized filings, the same embedding model, the same LLM, and the same eval questions. Only the pipeline code changes.</li>
+    <li><strong>Framework defaults:</strong> use the framework's own splitter and retriever, to measure what a typical framework build gets.</li>
+    <li><strong>Measure:</strong> eval scores, time per question, lines of code, and how hard it is to change one step (for example, add BM25 or page-number citations).</li>
+  </ul>
+  <p>Question that the comparison answers: what does custom, structure-aware code gain over a standard framework build?</p>
+
+  <h2><span class="n">13</span>Open questions</h2>
+  <p>None. All decisions are made.</p>
+
+  <h2><span class="n">14</span>Glossary</h2>
+  <p class="sub">Terms that we learn along the way.</p>
+  <dl>
+    <dt>Chunk</dt><dd>A piece of a document that is embedded and searched as one unit.</dd>
+    <dt>Embedding</dt><dd>A vector (list of numbers) that represents the meaning of a text.</dd>
+    <dt>Small-to-big</dt><dd>Search on small chunks, then send the larger parent section to the LLM.</dd>
+    <dt>Lexical search (sparse)</dt><dd>Search that matches words. BM25 and TF-IDF are examples. Each text is a long, mostly-zero list with one position per vocabulary word.</dd>
+    <dt>Semantic search (dense)</dt><dd>Search that matches meaning with embedding vectors. The vectors are short and every position has a value.</dd>
+    <dt>BM25</dt><dd>A lexical ranking function. It scores by term frequency, word rarity (IDF), and chunk length.</dd>
+    <dt>IDF</dt><dd>Inverse document frequency. A word that occurs in fewer chunks gets more weight.</dd>
+    <dt>Hybrid search</dt><dd>Run lexical and semantic search, then merge the two result lists.</dd>
+    <dt>RRF</dt><dd>Reciprocal Rank Fusion. Merges ranked lists by rank only: sum of 1 / (60 + rank).</dd>
+    <dt>HNSW</dt><dd>An approximate index for vector search. It links each vector to its near neighbors and walks the graph toward the question.</dd>
+    <dt>Inverted index</dt><dd>The index for lexical search. For each word, a list of the chunks that contain it.</dd>
+    <dt>Contextual retrieval</dt><dd>At ingestion, an LLM writes a short description of each chunk in the context of its document. The description is put in front of the chunk before it is embedded and indexed for BM25. Nothing changes at question time.</dd>
+    <dt>ANN recall</dt><dd>The share of the exact nearest neighbors that an approximate index finds.</dd>
+  </dl>
+  </section>
+
+  <section id="tab-build" class="tab" role="tabpanel">
+  <h2>How the build runs</h2>
+  <p>The orchestrator (this session, Fable) never writes the implementation. For each task it writes a <strong>contract</strong>: inputs, outputs, file names, and the checks that prove the task works. A subagent implements the contract. The orchestrator runs the checks itself, and it does not trust the subagent's report. Every wave ends at a <strong>gate</strong>: the checks pass, the orchestrator reports in plain terms, and you approve before the next wave starts.</p>
+  <table>
+    <tr><th>Rule</th><th>Detail</th></tr>
+    <tr><td>Subagent models</td><td>Sonnet for parsing, search, evals, and answer code. Haiku for mechanical work: downloads, schema, glue.</td></tr>
+    <tr><td>Decisions</td><td>A subagent that hits a design choice stops and reports. It does not decide. Choices come back to you, and they are logged in section 13 of the Plan tab.</td></tr>
+    <tr><td>Parallel work</td><td>Tasks with no dependency between them run at the same time, in the same wave.</td></tr>
+    <tr><td>Git</td><td>One commit per task on <code>dev</code>. Nothing on <code>main</code> until the final report.</td></tr>
+    <tr><td>Compute</td><td>Embedding and Qwen runs take hours. They run in the background, with a timed sample first and an ETA before the full run.</td></tr>
+    <tr><td>Reports</td><td>Each gate report has: what exists (files), what the checks showed (numbers), what it means, and what is open.</td></tr>
+  </table>
+
+  <h2>Wave 0: environment and skeleton</h2>
+  <p><em>Plan sections: 7, 11. Model: Haiku. Sequential.</em></p>
+  <ul>
+    <li>Repo layout, <code>pyproject.toml</code> (uv, Python 3.12), <code>docker-compose.yml</code> with Postgres 17 + pgvector, <code>.env.example</code>.</li>
+    <li>Pull <code>gpt-oss:20b</code> in Ollama. Download <code>bge-small-en-v1.5</code>, <code>bge-m3</code>, <code>bge-reranker-v2-m3</code>.</li>
+    <li>Smoke checks: Postgres answers, <code>vector</code> extension loads, Ollama answers for both models, each bge model embeds one sentence, the bge-small tokenizer counts tokens.</li>
+  </ul>
+  <p><strong>Gate:</strong> every smoke check passes. Nothing for you to review.</p>
+
+  <h2>Wave 1: corpus</h2>
+  <p><em>Plan section: 2. Two tasks, in order.</em></p>
+  <p><strong>1a. Survey (Sonnet).</strong> Read the EDGAR quarterly indexes from 2025 Q3 to 2026 Q3. List every 10-K. For each filer, read the SEC submissions record: SIC code, filer category, entity type. Draft the filer rule from section 2 as concrete conditions (for example: exclude SIC 6189 asset-backed issuers, exclude trusts and funds). Download a random sample of 30 eligible filings and survey them: inline XBRL present, page breaks, Item headings found, table counts, filer category. Report what the parser will face.</p>
+  <p><strong>1b. Download (Haiku).</strong> Pick 1,100 eligible filings at random with a fixed seed (1,100 leaves room for parse failures). Download the primary document with the SEC rate limit and User-Agent. Write <code>data/raw/manifest.jsonl</code>. Resumable.</p>
+  <p><strong>Gate:</strong> 1,000+ filings on disk. <strong>You review</strong> the concrete filer rule and the survey report, because they decide what the corpus is.</p>
+
+  <h2>Wave 2: parser</h2>
+  <p><em>Plan section: 3. Model: Sonnet. 2a and 2b in parallel, then 2c.</em></p>
+  <p><strong>2a. Prose parser.</strong> Inline XBRL cleaning, page split and page labels, Item detection (with table-of-contents skipping, combined Items split, integrated-report cross-reference mapping, incorporated-by-reference flag, omitted-Item handling), section split inside each Item. Output: the normalized JSON from section 3, one file per filing.</p>
+  <p><strong>2b. Table parser.</strong> Layout-or-data rule, title and units, header flattening, number-cell merge, hierarchy, JSON and text forms, placeholder line in the prose, page. Coverage check against every <code>ix:nonFraction</code> value.</p>
+  <p><strong>2c. Integration and checks.</strong> Run 2a + 2b over all filings. The checks from section 3 on every filing. Failure list with reasons. Parse-quality report: pass rate, failures by reason, Item size distributions.</p>
+  <p><strong>Gate:</strong> at least 95% of filings pass every check, and each failure has a named reason. The orchestrator spot-checks 10 filings against the rendered filing on sec.gov. <strong>You review</strong> 3 example JSON files and the failure list.</p>
+
+  <h2>Wave 3: eval harness</h2>
+  <p><em>Plan section: 4. 3a and 3b in parallel.</em></p>
+  <p><strong>3a. Golden set (Sonnet, several subagents).</strong> Each subagent gets a slice of parsed filings and a quota per question type: fact lookup, number from a table, paraphrased, exact term, general, unanswerable, multi-part. Every question has one definitive answer, the exact evidence text copied from the parsed JSON, Item, page, reference answer, companies named, and type. A validator subagent then checks every evidence string against the parsed JSON (exact match, correct page) and removes duplicates. Split: about 100 development, about 50 test. The test set is sealed: no run touches it until wave 8.</p>
+  <p><strong>3b. Harness code (Sonnet).</strong> One command: <code>run_eval --index X --search Y --reranker Z</code>. Retrieval metrics: recall@k, MRR, recall at a token budget, prose and table split, router accuracy. Bootstrap confidence intervals. Results log: one row per run, with every setting and the date. Judge module: four prompts (correctness, faithfulness claim by claim, citation support, refusal), labels not scores, reason before label, structured JSON, versioned prompts, temperature 0, gpt-oss-20b through Ollama. Calibration tooling: export a labeling sheet, compute agreement, held-out check, 3-run consistency check.</p>
+  <p><strong>Gate:</strong> 100% of evidence strings validate. The harness runs end to end on a random retriever and prints metrics with intervals. <strong>You spot-check</strong> 15 questions. Judge calibration waits for wave 7, when real answers exist.</p>
+
+  <h2>Wave 4: chunking, embeddings, storage</h2>
+  <p><em>Plan sections: 5 (step 1), 6, 7. 4a, 4b, 4c in parallel, then the embedding runs.</em></p>
+  <p><strong>4a. Schema and loader (Haiku).</strong> Tables for filings, sections, tables, chunks per index, and the query log. HNSW with cosine distance. Loader from the normalized JSON.</p>
+  <p><strong>4b. Chunkers (Sonnet).</strong> The 4 strategies, prose only. Table chunks with the step 1 default (title, units, row and column labels). Metadata prefix. Chunk sizes measured with the bge-small tokenizer. Tests: no chunk over the limit, no chunk across a section, every character of prose in exactly one chunk (strategies 2 to 4).</p>
+  <p><strong>4c. Embedding runner (Sonnet).</strong> Batched, on the Mac GPU (MPS), resumable, both models. Times a 1% sample and prints the ETA before the full run.</p>
+  <p><strong>Runs:</strong> the 7 indexes. Compute-heavy. <code>bge-m3</code> runs overnight if the ETA says so.</p>
+  <p><strong>Gate:</strong> 7 indexes in Postgres with the expected chunk counts. Exact-search check at <code>ef_search</code> 40, 100, 200 with recall and speed. <strong>You review</strong> the ETA before the long runs start.</p>
+
+  <h2>Wave 5: search and the retrieval experiments</h2>
+  <p><em>Plan sections: 8, 5 (steps 2 and 3). Model: Sonnet. 5a first, then the experiments.</em></p>
+  <p><strong>5a. Search code.</strong> BM25 in our own code over the chunk text. Vector search through pgvector. RRF. Company router with Qwen: structured output, the four edge cases, one search per named company with a budget, general cap. Router accuracy on the golden set.</p>
+  <p><strong>Experiment A: chunking and embeddings.</strong> 7 indexes &times; 3 search methods = 21 retrieval runs on the development set. Retrieval metrics only, no LLM. Prose and table scores apart. Sanity check: table scores about equal across strategies. Winner: one index, one search method.</p>
+  <p><strong>Experiment B: tables.</strong> Options 0 to 3 on the winner, measured on the table questions. Option 3 on the subset from section 5. Winner: one table option.</p>
+  <p><strong>Experiment C: contextual retrieval.</strong> None, metadata, metadata plus LLM context, on the subset, on the winner.</p>
+  <p><strong>Gate:</strong> three results tables with intervals. <strong>You approve</strong> the winners. Every later wave uses them.</p>
+
+  <h2>Wave 6: reranking</h2>
+  <p><em>Plan section: 9. Model: Sonnet.</em></p>
+  <p>Implement the six rerankers: none, MMR, ColBERTv2 on the 50 candidates, <code>bge-reranker-v2-m3</code>, monoT5, listwise Qwen. Run each on the winning index and search method. Retrieval quality at top 8 and time per question.</p>
+  <p><strong>Gate:</strong> one results table. <strong>You approve</strong> the reranker for the final system.</p>
+
+  <h2>Wave 7: answers, citations, baselines, judge calibration</h2>
+  <p><em>Plan sections: 10, 11, 4 (judge). Model: Sonnet. 7a first, then the runs, then calibration, then scoring.</em></p>
+  <p><strong>7a. Answer code.</strong> Small-to-big prompt builder with the 20k budget. Qwen through Ollama, thinking on and off. Citation format: chunk ID plus quote. Citation check in code. Refusal rule. Query log row per question.</p>
+  <p><strong>Runs:</strong> A (no documents) and B (RAG), each with thinking on and off. Four runs on the development set, 1 to 2 hours each.</p>
+  <p><strong>Calibration:</strong> export 40 answers across the runs. <strong>You label them</strong> (about an hour). Agreement with gpt-oss-20b, rubric fixes, held-out check, 3-run consistency. If agreement stays low, Haiku becomes the judge for correctness and refusals.</p>
+  <p><strong>Scoring:</strong> all four runs through the calibrated judge. Answer metrics with intervals.</p>
+  <p><strong>Gate:</strong> B beats A, or the report explains why not. <strong>You approve</strong> the final configuration.</p>
+
+  <h2>Wave 8: final system, LangGraph, sealed test set</h2>
+  <p><em>Plan section: 12. Model: Sonnet. 8a and 8b in parallel, then 8c.</em></p>
+  <p><strong>8a. Final optimized RAG.</strong> The winning choices only, in 300 lines or fewer, no framework. Line count is a check.</p>
+  <p><strong>8b. LangGraph build.</strong> The same inputs, framework defaults for splitting and retrieval. Lines of code and the effort to add BM25 and page citations, recorded.</p>
+  <p><strong>8c. Sealed test set.</strong> Run 8a and 8b on the 50 test questions, one time. Full report: every experiment table, the final numbers, the limits from the System tab, and the open questions.</p>
+  <p><strong>Gate:</strong> the final report. <strong>You read it.</strong> Then <code>dev</code> merges to <code>main</code>.</p>
+
+  <h2>Where you are needed</h2>
+  <table>
+    <tr><th>Wave</th><th>Your part</th><th>Time</th></tr>
+    <tr><td>1</td><td>Review the filer rule and the survey report</td><td>15 minutes</td></tr>
+    <tr><td>2</td><td>Read 3 parsed filings and the failure list</td><td>20 minutes</td></tr>
+    <tr><td>3</td><td>Spot-check 15 golden questions</td><td>30 minutes</td></tr>
+    <tr><td>4</td><td>Approve the ETA before the long embedding runs</td><td>5 minutes</td></tr>
+    <tr><td>5, 6</td><td>Approve the winners</td><td>15 minutes each</td></tr>
+    <tr><td>7</td><td>Label 40 answers for judge calibration</td><td>1 hour</td></tr>
+    <tr><td>8</td><td>Read the final report</td><td>30 minutes</td></tr>
+  </table>
+  </section>
+</main>
+<script>
+  function showTab(name) {
+    for (const t of ['system', 'plan', 'build']) {
+      document.getElementById('tab-' + t).classList.toggle('active', t === name);
+      document.getElementById('tab-btn-' + t).setAttribute('aria-selected', t === name ? 'true' : 'false');
+    }
+    try { localStorage.setItem('citation-rag-tab', name); } catch (e) {}
+  }
+  try {
+    const saved = localStorage.getItem('citation-rag-tab');
+    if (saved === 'plan' || saved === 'system' || saved === 'build') showTab(saved);
+  } catch (e) {}
+</script>
+</body>
+</html>

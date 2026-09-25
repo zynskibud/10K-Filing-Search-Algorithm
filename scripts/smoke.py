@@ -6,10 +6,17 @@ import shutil
 import subprocess
 import sys
 
-import psycopg
-import torch
-from sentence_transformers import CrossEncoder, SentenceTransformer
-from transformers import AutoTokenizer
+from dotenv import load_dotenv
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Read .env first, so HF_HOME points inside the project before any HF import.
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
+import psycopg  # noqa: E402
+import torch  # noqa: E402
+from sentence_transformers import CrossEncoder, SentenceTransformer  # noqa: E402
+from transformers import AutoTokenizer  # noqa: E402
 
 # Test results
 tests_passed = 0
@@ -68,6 +75,9 @@ def test_tokenizer():
     """Test tokenizer loading from HF_HOME."""
     hf_home = os.environ.get("HF_HOME", "")
     assert hf_home, "HF_HOME not set"
+    assert os.path.isabs(hf_home) and hf_home.startswith(PROJECT_ROOT), (
+        f"HF_HOME must be inside the project: {hf_home}"
+    )
 
     tokenizer = AutoTokenizer.from_pretrained(
         "BAAI/bge-small-en-v1.5",
