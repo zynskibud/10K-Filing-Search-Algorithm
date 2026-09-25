@@ -16,3 +16,8 @@ Format: wave, question, default taken, effect of the default.
 
 - **Wave 0 / isolation, second case.** The subagent's smoke run also wrote a 6.5 GB model copy into the project root (not the cache folder), because `HF_HOME` was unset in that run. Deleted. The fixed smoke script cannot do this again.
 - **Wave 0 / coordinator.** The coordinator session restarted; reports now go to `ai-engineering-6c` instead of `ai-engineering-c7`. The coordinator confirmed: keep `data/raw`, gzip it (done at download time, so it is never uncompressed on disk), and pull gpt-oss:20b only after the coordinator's GO for wave 7.
+
+## Wave 1a
+
+- **Wave 1a / filer rule.** Grantor trusts and commodity or ETF trusts (for example SPDR Gold Trust) have no reliable field to exclude them: they carry SIC 6221 and `entityType = operating`, the same as normal companies, and a name match on "Trust" would also drop real operating companies and REITs. Default: include them in the candidate pool. The parser's checks (required Items, Item sizes) will fail most of them, and they land on the failure list instead of the index. Effect: a few non-operating trusts may stay in the corpus if their 10-K follows the standard Item list; that is the condition you set ("as long as the 10-K is the same"), so it is acceptable.
+- **Wave 1a / time.** The SEC submissions API answers at about 2 to 4 requests per second, not 10, so the metadata fetch takes about 40 minutes instead of 12. No action needed.
