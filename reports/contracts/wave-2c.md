@@ -8,8 +8,14 @@ Implementer: Sonnet subagent. Depends on: wave 2a (prose parser), wave 2b (table
 - No commits.
 
 ## Deliverables
+0. **Table ids.** Assign `id` = `t{index:03d}` to each data table in document order before placement; wave 2b's dicts carry no id yet, and wave 2a's join currently acts only on a list return, so wire the dict shape and the ids here.
 1. **Join.** `parse_filing(path, meta)` cleans, splits pages, extracts tables (2b; note `extract_tables(tree, page_of)` returns a dict with keys `tables`, `layout_tables`, `xbrl_nonfraction_total`, `xbrl_nonfraction_matched`, and each table carries its lxml element for placement), unwraps layout tables into prose, detects Items and sections (2a), inserts `[Table: id]` placeholders at the table positions with `position` set, assigns `section_id` and `item` to each table, computes coverage over prose + table text, and runs all checks. Reads `.htm` and `.htm.gz`.
-2. **Checks** (`checks.py`), each returning pass/fail with a detail string. The prose checks from 2a, plus:
+2. **Checks** (`checks.py`), each returning pass/fail with a detail string. The prose checks from 2a, with these adjustments measured on the sample (wave 2a report):
+   - `items_in_order`: Items 15 and 16 are exempt from the order check (filers place the Form 10-K Summary before the exhibit index).
+   - `coverage`: floor 0.90 (short shell filings have proportionally more front and back matter; 0.95 failed two correct parses).
+   - Omitted-Item rule: an Item whose text is under 1,000 characters and matches "not required", "not applicable", "none", "reserved", or "omitted" is `not_required` (the 200-character limit missed a padded disclaimer).
+   - A filing whose Item headings follow the Form 10-Q structure (Part I Items 1 to 4, Part II Items 1 to 6) fails `required_items_present`; record the failure reason as `not_a_10k_structure` so the report can count them.
+   Plus:
    - `xbrl_in_table_coverage`: among `ix:nonFraction` values that sit inside a data table, the share matched to a parsed cell >= 0.98 (wave 2b measured 0.99998 on the sample). Also record, as stats only, the document-level share (matched / all tagged values; about 0.82 on the sample, because about 22% of tagged values are in prose and 4% in narrow layout tables).
    - `table_count_range`: data tables between 5 and 900 (wave 2b measured 8 to 134 on the sample).
    - `placeholders_consistent`: every table id in `tables[]` appears exactly once as a placeholder in some section text, and vice versa.
