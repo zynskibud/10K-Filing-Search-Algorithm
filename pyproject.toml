@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "citation_rag"
+version = "0.1.0"
+description = "Citation RAG system"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx",
+    "lxml",
+    "psycopg[binary,pool]",
+    "pgvector",
+    "numpy",
+    "pydantic",
+    "pydantic-settings",
+    "python-dotenv",
+    "sentence-transformers",
+    "torch",
+    "transformers",
+    "tqdm",
+    "anthropic",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[tool.uv]
+managed = true
