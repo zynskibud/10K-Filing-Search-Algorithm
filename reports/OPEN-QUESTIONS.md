@@ -15,3 +15,4 @@ Format: wave, question, default taken, effect of the default.
 - **Wave 0 / isolation.** The first model download wrote 7.3 GB into `~/.cache/huggingface` (outside the project). I deleted those files (only the ones created during wave 0) and fixed the script. Nothing for you to do; noted for the record.
 
 - **Wave 0 / isolation, second case.** The subagent's smoke run also wrote a 6.5 GB model copy into the project root (not the cache folder), because `HF_HOME` was unset in that run. Deleted. The fixed smoke script cannot do this again.
+- **Wave 0 / coordinator.** The coordinator session restarted; reports now go to `ai-engineering-6c` instead of `ai-engineering-c7`. The coordinator confirmed: keep `data/raw`, gzip it (done at download time, so it is never uncompressed on disk), and pull gpt-oss:20b only after the coordinator's GO for wave 7.
