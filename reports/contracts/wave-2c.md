@@ -1,6 +1,6 @@
 # Wave 2c contract: parser integration and full-corpus checks
 
-Implementer: Sonnet subagent. Depends on: wave 2a (prose parser), wave 2b (table parser), wave 1b (`data/raw/manifest.jsonl`). Schema: `reports/contracts/schemas.md` section 1.
+Implementer: Sonnet subagent. Depends on: wave 2a (prose parser), wave 2b (table parser), wave 1b (`data/raw/corpus.jsonl`). Schema: `reports/contracts/schemas.md` section 1.
 
 ## Rules
 - LIGHT work, CPU only. Parsing 1,100 filings takes minutes with `multiprocessing` (use at most 4 processes; the machine is shared).
@@ -14,7 +14,7 @@ Implementer: Sonnet subagent. Depends on: wave 2a (prose parser), wave 2b (table
    - `table_count_range`: data tables between 5 and 900 (wave 2b measured 8 to 134 on the sample).
    - `placeholders_consistent`: every table id in `tables[]` appears exactly once as a placeholder in some section text, and vice versa.
    - `no_empty_sections`: no section text under 50 characters (after placeholders are excluded) unless the Item status is not `present`.
-3. **Run.** `uv run python -m citation_rag.parse.run --manifest data/raw/manifest.jsonl --out data/parsed --workers 4`. Writes one JSON per filing. Filings that fail any check are still written (with `checks.passed = false`) and also listed in `data/parse_failures.jsonl` with `accession_no`, `company`, `filer_category`, and the failure list. Resumable: skip filings whose JSON exists unless `--force`.
+3. **Run.** `uv run python -m citation_rag.parse.run --manifest data/raw/corpus.jsonl --out data/parsed --workers 4` (the 1,100-filing corpus, not the 1,350-row manifest)``. Writes one JSON per filing. Filings that fail any check are still written (with `checks.passed = false`) and also listed in `data/parse_failures.jsonl` with `accession_no`, `company`, `filer_category`, and the failure list. Resumable: skip filings whose JSON exists unless `--force`.
 4. **Quality report** `reports/wave-2c.md`:
    - pass rate; failures grouped by check with counts and 3 example accession numbers each;
    - distributions: pages per filing, page-label coverage, sections per Item (1A, 7, 8), Item character sizes (p10/p50/p90), data tables per filing, xbrl coverage;
@@ -27,4 +27,4 @@ Implementer: Sonnet subagent. Depends on: wave 2a (prose parser), wave 2b (table
 ## Definition of done
 - >= 95% of filings pass every check, or the report explains each failing group and proposes the fix (do not silently relax a threshold; if you change one, say so and why).
 - `uv run pytest tests/test_parse_corpus.py` passes.
-- `data/parsed/` has one JSON per manifest row.
+- `data/parsed/` has one JSON per corpus.jsonl row (1,100).
