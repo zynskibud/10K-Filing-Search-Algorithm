@@ -1,0 +1,39 @@
+# Wave 4 contract: chunking, storage, embedding runner
+
+Three LIGHT build tasks in parallel (4a, 4b, 4c), then one GPU execution (the 7 index runs, through `scripts/run.sh 4`, only after the coordinator's GO). This contract covers the build. Schemas: `reports/contracts/schemas.md` section 4. Plan: Plan tab sections 5, 6, 7.
+
+## Shared rules
+- LIGHT: write code and unit tests on fixtures. No embedding run over the corpus. No MPS use in tests (CPU, at most 20 chunks). Postgres on port 5433 may be used for tests with a throwaway schema name.
+- Token ruler: the `bge-small-en-v1.5` tokenizer from the project cache (`HF_HOME` from `.env`, `HF_HUB_OFFLINE=1`). All chunk sizes are measured with it.
+- Inputs: `data/parsed/*.json` where `checks.passed` is true (wave 2c). Until 2c finishes, develop on `tests/fixtures/parsed/` and on JSON files produced by `citation_rag.parse.filing` for 3 sample filings (write them under `tests/fixtures/parsed_samples/`).
+- No commits. No edits outside the files you own.
+
+## 4a. Schema and loader (Haiku). Owns `citation_rag/index/schema.py`, `citation_rag/index/load.py`, `tests/test_index_load.py`.
+1. `schema.py`: SQL for tables `filings` (accession_no PK, cik, company, ticker, fiscal_year, filed_date, filer_category, sic, source_url, page_count), `sections` (id PK, accession_no FK, item, part, seq, title, page_start, page_end, text, token_count), `tables_parsed` (id = accession_no || ':' || table_id PK, accession_no, section_id, item, title, units, headers JSONB, rows JSONB, text, page_start, page_end), `chunks_{index_name}` created per index with the columns in schema section 4 and `embedding vector(d)`; HNSW index `USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)`; B-tree indexes on (accession_no), (cik), (item), (section_id). Index names: `bge_small__s1`, `bge_small__s2`, `bge_small__s3`, `bge_m3__s1`, `bge_m3__s2`, `bge_m3__s3`, `bge_m3__s4`. Dimensions: 384 for bge_small, 1024 for bge_m3. A `run_log` table for query logging (created here, used in wave 7): id, created_at, question, config JSONB, router JSONB, retrieved_ids BIGINT[], reranked_ids BIGINT[], section_ids TEXT[], context_tokens INT, answer TEXT, citations JSONB, model TEXT, thinking BOOL, latency_ms JSONB.
+2. `load.py`: `load_filings(parsed_dir)` upserts filings, sections, tables_parsed from passing JSONs. `load_chunks(index_name, chunks_jsonl, vectors_npy=None)` inserts chunks with `COPY`, embedding null when no vectors given; `attach_vectors(index_name, ids_npy, vectors_npy)` updates embeddings in batches and builds the HNSW index after the load (create the HNSW index after data is in, not before). CLI for each.
+3. Tests against Postgres 5433 in a schema `test_wave4` that the test creates and drops: create all tables, load the fixture filing, load 10 chunks with random 384-d vectors, query `ORDER BY embedding <=> %s LIMIT 3`, assert results and cleanup.
+
+## 4b. Chunkers (Sonnet). Owns `citation_rag/chunk/`, `tests/test_chunk.py`.
+1. `tokens.py`: `count_tokens(text)` with the bge-small tokenizer, cached instance, no special tokens.
+2. `prefix.py`: `make_prefix(filing, item, section_title) -> "Company | FY2025 | Item 1A | <section title>"`. `embed_text = prefix + "\n" + text`. The stored `text` has no prefix.
+3. `prose.py`: four strategies over the prose of a filing (section texts with the `[Table: id]` placeholder lines removed):
+   - `s1` fixed 400 tokens, 50-token overlap, over the whole filing's prose joined in document order, ignoring section and Item boundaries. Each chunk still records the section and Item where it starts, and page_start/page_end from the sections it spans.
+   - `s2` fixed 400 tokens, 50-token overlap, never across a section boundary.
+   - `s3` paragraphs joined up to 400 tokens, never across a section or inside a paragraph; a single paragraph over 400 tokens is split at sentence boundaries (regex on `. `, `; `), then hard-split if still over 512.
+   - `s4` whole section as one chunk; a section over 8,000 tokens is split at paragraph boundaries into parts under 8,000 (bge-m3 limit), each part a chunk.
+   Token cutting uses the tokenizer's offset mapping so chunk text is exact substrings of the section text. Page range of a chunk: the pages of the sections it covers; for s1 across sections, min and max.
+4. `tables.py`: table chunks, option 2 default: `embed_text` = prefix + title + units + "Columns: " + headers + "Rows: " + row labels. `text` = the full table text form from the parsed JSON (this is what citations quote and what goes to the LLM). If the table text exceeds 400 tokens, split by rows into parts, each part repeating the title and header line, with `seq` increasing and the same `table_id` plus `part` index. Also implement options 0 (no table chunks), 1 (table text rows merged into the prose flow as a paragraph before chunking, for step 2), and 3 (summary text supplied from a file `data/table_summaries.jsonl` if present; not generated here).
+5. `run.py`: `uv run python -m citation_rag.chunk.run --strategy s3 --table-option 2 --out data/chunks/bge_small__s3.jsonl` writes one JSONL row per chunk with all columns of schema section 4 except `embedding`, plus `strategy`, `table_option`. Deterministic. Prints counts and token stats (p50, p90, max, share over 400 and over 512).
+6. Tests: for each strategy on the fixture filings: no chunk over its limit (512 for s1 to s3, 8,000 for s4); s2, s3, s4 never cross a section; s3 never splits a paragraph unless the paragraph alone exceeds 400; every character of every section's prose appears in exactly one chunk for s2, s3, s4 (overlap excluded, compare after removing overlaps); s1 covers all prose; table split parts each start with the header line; the prefix is in `embed_text` and not in `text`; determinism (two runs, same output).
+
+## 4c. Embedding runner (Sonnet). Owns `citation_rag/index/embed.py`, `citation_rag/index/models.py`, `tests/test_embed.py`.
+1. `models.py`: `load_embedder(name)` for `bge_small` and `bge_m3` from the project cache, offline, device from `--device` (mps or cpu), `normalize_embeddings=True`. bge-small uses no query instruction for documents; for queries the standard bge-small instruction "Represent this sentence for searching relevant passages: " is prepended (expose `encode_query` and `encode_docs`). bge-m3 dense only, no instruction.
+2. `embed.py`: `uv run python -m citation_rag.index.embed --index bge_small__s3 --chunks data/chunks/bge_small__s3.jsonl --device mps [--sample 0.01] [--full]`. Reads `embed_text`, sorts by token length for efficient batching, batch size 64 for bge-small and 16 for bge-m3, writes shards `data/vectors/{index}/shard_{n}.npy` with matching `ids_{n}.npy` every 5,000 chunks (resumable: skips complete shards), then calls `load.attach_vectors`. With `--sample 0.01` it embeds 1% and prints tokens per second and the ETA for the full run, then exits. `--full` runs everything. Never runs without one of the two flags.
+3. Tests: CPU only, 20 fixture chunks: shapes (384 and 1024), normalized vectors (norm 1 ± 1e-3), determinism, resumability (delete one shard, rerun, only that shard is rebuilt), and that `--sample` prints an ETA line matching `ETA_full_run_minutes=`. bge-m3 loads in the test only if memory allows; otherwise mark skipped with the reason.
+
+## Execution (later, GPU, after GO)
+`scripts/waves.conf` line for wave 4 runs, in order: chunk all 7 configurations, sample-ETA each embedding with `--sample 0.01`, write ETAs to `runs/wave-4/eta.txt`, then the full runs, bge_small first. The orchestrator reads the ETAs before allowing the full runs (OPEN-QUESTIONS records the ETA if it exceeds 8 hours).
+
+## Definition of done (build)
+- `uv run pytest tests/test_index_load.py tests/test_chunk.py tests/test_embed.py` passes.
+- `chunk.run` produces all 7 JSONL files for the 3 sample filings under a test output dir, with the stats printed.

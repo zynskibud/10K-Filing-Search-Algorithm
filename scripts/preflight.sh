@@ -11,7 +11,7 @@ set -u
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 AI_ENGINEERING_ROOT="$(cd "$REPO_ROOT/.." && pwd)"
-LOCK_DIR="$AI_ENGINEERING_ROOT/.coord/heavy.lock"
+LOCK_DIR="$AI_ENGINEERING_ROOT/.coord/gpu.lock"
 DISK_FAIL_GB=15
 LOAD_WARN=2
 HARD_FAIL=0
@@ -50,6 +50,13 @@ if [ -d "$LOCK_DIR" ]; then
   esac
 else
   ok "heavy lock free"
+fi
+
+# Timing lock: when a latency benchmark runs, nothing else may run.
+if [ -d "$AI_ENGINEERING_ROOT/.coord/timing.lock" ]; then
+  fail "timing lock held: $(cat "$AI_ENGINEERING_ROOT/.coord/timing.lock/owner" 2>/dev/null)"
+else
+  ok "timing lock free"
 fi
 
 # Ollama daemon and the models this project uses.

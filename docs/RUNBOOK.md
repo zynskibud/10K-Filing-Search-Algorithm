@@ -1,12 +1,12 @@
 # Runbook: how heavy work runs on this machine
 
-The machine is shared. One HEAVY job runs at a time, under the coordinator's lock at `../.coord/heavy.lock` (see `../.coord/PROTOCOL.md`). HEAVY means any Ollama inference, any embedding run, any benchmark timing run, any container over 4 GB, or any model pull over 5 GB.
+The machine is shared. One HEAVY job runs at a time, under the coordinator's GPU lock at `../.coord/gpu.lock` (formerly `heavy.lock`) (see `../.coord/PROTOCOL.md`). HEAVY means any Ollama inference, any embedding run, any benchmark timing run, any container over 4 GB, or any model pull over 5 GB.
 
 ## Rules
 
 1. **Waves 4 to 8 run only through `scripts/run.sh <wave>`.** Never start an embedding run, a Qwen run, or the judge with a bare `uv run` command. `run.sh` runs the preflight, takes the lock, runs the wave detached under `caffeinate -i`, and releases the lock when the wave ends or is killed.
 2. **Each HEAVY wave waits for the coordinator's GO** before `run.sh` is called.
-3. **LIGHT work** (editing code, unit tests, downloads under 5 GB, parsing) does not take the lock. While a Vector Retrieval timing run holds the lock, LIGHT work also stops.
+3. **Resource classes** (from the protocol): GPU (Ollama, embedding, MPS) one at a time under `gpu.lock` after GO; TIMING (Vector latency benchmarks) alone on the machine under `timing.lock`, during which only API work is allowed; CPU-BULK (parsing, index builds, test suites over one core) at most 4 workers, never during TIMING; LIGHT (code edits, one-core unit tests, subagents writing code, git) always, except during TIMING.
 4. **Stop for the human** only for: disk under 15 GB free, spend over $5, or a failed isolation check.
 
 ## Commands
@@ -21,7 +21,7 @@ The machine is shared. One HEAVY job runs at a time, under the coordinator's loc
 ## Lock format
 
 ```
-mkdir ../.coord/heavy.lock && echo "citation-rag <wave> <ISO time>" > ../.coord/heavy.lock/owner
+mkdir ../.coord/gpu.lock && echo "citation-rag <wave> <ISO time>" > ../.coord/gpu.lock/owner
 ```
 
 `run.sh` releases only a lock whose owner line starts with `citation-rag <wave>`. It never removes another project's lock.

@@ -18,7 +18,7 @@ set -u
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 AI_ENGINEERING_ROOT="$(cd "$REPO_ROOT/.." && pwd)"
-LOCK_DIR="$AI_ENGINEERING_ROOT/.coord/heavy.lock"
+LOCK_DIR="$AI_ENGINEERING_ROOT/.coord/gpu.lock"
 LOCK_OWNER_FILE="$LOCK_DIR/owner"
 WAVES_CONF="$REPO_ROOT/scripts/waves.conf"
 
