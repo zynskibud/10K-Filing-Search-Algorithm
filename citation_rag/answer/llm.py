@@ -1,29 +1,37 @@
-"""The answer-stage LLM client: `OllamaChat` over the Ollama chat API.
+"""The answer-stage LLM client: `OllamaChat` over the shared Ollama client.
 
 Contract (wave 7a, point 3): `OllamaChat(model="qwen3:8b", thinking, temperature=0,
-num_ctx=32768, timeout=900)`, using `POST /api/chat` with `format: "json"` for
-the final answer, and the `think` option to toggle thinking. Records input
-and output token counts and wall time from the response fields.
+num_ctx=32768, timeout=900)`, `format: "json"` for the final answer, and the
+`think` option to toggle thinking. Records input and output token counts and
+wall time from the response fields.
 
-`LLMClient` and `FakeLLMClient` are reused as-is from
-`citation_rag.search.router` (wave 5a already built them for the company
-router, and the contract says to import rather than duplicate). Every test
-in this wave uses `FakeLLMClient` only; `OllamaChat` is never called here.
+Integration-1 item 2: the actual HTTP call is now made by
+`citation_rag.llm.OllamaClient`, the one client shared by the router, the
+listwise reranker, the answer stage, and the judge (previously this module
+had its own copy, calling `POST /api/chat` directly). `OllamaChat` keeps its
+own constructor shape (`thinking`, not `think`; `qwen3:8b`/`32768`/`900`
+defaults) since `citation_rag.answer.run_all` already builds it that way;
+it is now a thin wrapper around the shared client instead of its own client.
+
+`LLMClient` and `FakeLLMClient` are reused as-is from `citation_rag.llm`.
+Every test in this wave uses `FakeLLMClient` only; `OllamaChat` is never
+called here.
 """
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 
-from citation_rag.search.router import FakeLLMClient, LLMClient  # noqa: F401  (re-exported)
+from citation_rag.llm import FakeLLMClient, LLMClient, OllamaClient  # noqa: F401  (re-exported)
 
 __all__ = ["LLMClient", "FakeLLMClient", "OllamaChat"]
 
 
 @dataclass
 class OllamaChat:
-    """Real client over the local Ollama chat API. Never called in this wave's tests."""
+    """Answer-stage client: `citation_rag.llm.OllamaClient` under the
+    constructor shape the answer pipeline already uses. Never called in
+    this wave's tests."""
 
     model: str = "qwen3:8b"
     thinking: bool = True
@@ -32,36 +40,30 @@ class OllamaChat:
     timeout: float = 900.0
     base_url: str | None = None
 
-    # Set after each `complete()` call, from the response fields.
-    last_input_tokens: int | None = field(default=None, init=False, repr=False)
-    last_output_tokens: int | None = field(default=None, init=False, repr=False)
-    last_wall_time_s: float | None = field(default=None, init=False, repr=False)
+    _client: OllamaClient | None = field(default=None, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self._client = OllamaClient(
+            model=self.model,
+            temperature=self.temperature,
+            think=self.thinking,
+            num_ctx=self.num_ctx,
+            format="json",
+            timeout=self.timeout,
+            base_url=self.base_url,
+        )
+
+    @property
+    def last_input_tokens(self) -> int | None:
+        return self._client.last_input_tokens
+
+    @property
+    def last_output_tokens(self) -> int | None:
+        return self._client.last_output_tokens
+
+    @property
+    def last_wall_time_s(self) -> float | None:
+        return self._client.last_wall_time_s
 
     def complete(self, prompt: str) -> str:
-        import time
-
-        import httpx
-
-        url = self.base_url or os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
-        start = time.perf_counter()
-        resp = httpx.post(
-            f"{url}/api/chat",
-            json={
-                "model": self.model,
-                "messages": [{"role": "user", "content": prompt}],
-                "format": "json",
-                "stream": False,
-                "think": self.thinking,
-                "options": {
-                    "temperature": self.temperature,
-                    "num_ctx": self.num_ctx,
-                },
-            },
-            timeout=self.timeout,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        self.last_wall_time_s = time.perf_counter() - start
-        self.last_input_tokens = data.get("prompt_eval_count")
-        self.last_output_tokens = data.get("eval_count")
-        return data["message"]["content"]
+        return self._client.complete(prompt)

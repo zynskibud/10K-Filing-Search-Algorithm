@@ -9,14 +9,19 @@ import numpy as np
 import psycopg
 from psycopg.rows import DictRow
 
+from citation_rag.chunk.tokens import count_tokens
+
 from .schema import create_chunk_table, create_hnsw_index
 
 
 def load_filings(parsed_dir: str | Path, conn: psycopg.Connection) -> None:
     """Load filings from parsed JSON files with checks.passed=true.
 
-    Upserts filings, sections (with token_count=0 for now), and tables_parsed
-    from all JSON files in parsed_dir where checks.passed is true.
+    Upserts filings, sections, and tables_parsed from all JSON files in
+    parsed_dir where checks.passed is true. Integration-1 item 5:
+    `sections.token_count` is filled with the bge-small tokenizer
+    (`citation_rag.chunk.tokens.count_tokens`), the same ruler used
+    everywhere else chunk sizes are measured.
 
     Args:
         parsed_dir: Path to directory containing parsed JSON files
@@ -92,7 +97,7 @@ def load_filings(parsed_dir: str | Path, conn: psycopg.Connection) -> None:
                         section["page_start"],
                         section["page_end"],
                         section["text"],
-                        0,  # token_count=0 for now, will be filled by chunker
+                        count_tokens(section["text"]),
                     ))
 
             # Upsert tables_parsed
@@ -133,52 +138,107 @@ def load_filings(parsed_dir: str | Path, conn: psycopg.Connection) -> None:
     conn.commit()
 
 
+CHUNK_COLUMNS = (
+    "id",
+    "chunk_key",
+    "accession_no",
+    "cik",
+    "item",
+    "section_id",
+    "table_id",
+    "seq",
+    "page_start",
+    "page_end",
+    "page_label",
+    "is_table",
+    "text",
+    "embed_text",
+    "token_count",
+)
+
+LOAD_CHUNKS_BATCH_SIZE = 10_000
+
+
+def _iter_chunk_batches(chunks_jsonl: Path, batch_size: int):
+    """Yield lists of up to `batch_size` parsed chunk dicts, in file order."""
+    batch: list[dict] = []
+    with chunks_jsonl.open() as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            batch.append(json.loads(line))
+            if len(batch) >= batch_size:
+                yield batch
+                batch = []
+    if batch:
+        yield batch
+
+
 def load_chunks(
     index_name: str,
     chunks_jsonl: str | Path,
     conn: psycopg.Connection,
     vectors_npy: str | Path | None = None,
+    batch_size: int = LOAD_CHUNKS_BATCH_SIZE,
 ) -> None:
-    """Load chunks into the database using INSERT.
+    """Load chunks into the database with `COPY ... FROM STDIN`, in batches.
+
+    Integration-1 item 4: batches of `batch_size` (10,000) rows go through
+    psycopg 3's `cursor.copy()` instead of one `INSERT` per row. `COPY` does
+    not support the old `COALESCE(%s, nextval(...))` id expression, so ids
+    are assigned explicitly, in Python, before each batch's `COPY`: any
+    chunk missing an "id" gets one from the table's own sequence, fetched
+    once per batch with `nextval(...) FROM generate_series(1, n)` rather
+    than one round trip per row. The sequence is bumped past the highest id
+    afterwards, same as before, so later inserts do not collide.
 
     Args:
         index_name: Name of the embedding index (e.g., 'bge_small__s1')
         chunks_jsonl: Path to JSONL file with chunk records
         conn: Database connection
         vectors_npy: Optional path to numpy file with embeddings (not used in basic load)
+        batch_size: Rows per COPY batch (and per id-assignment round trip)
     """
     chunks_jsonl = Path(chunks_jsonl)
     table_name = f"chunks_{index_name}"
+    columns_sql = ", ".join(CHUNK_COLUMNS)
 
-    # Load and insert chunks
     with conn.cursor() as cur:
-        with chunks_jsonl.open() as f:
-            for line in f:
-                chunk = json.loads(line)
+        for batch in _iter_chunk_batches(chunks_jsonl, batch_size):
+            missing = sum(1 for chunk in batch if chunk.get("id") is None)
+            new_ids: list = []
+            if missing:
+                cur.execute(
+                    f"SELECT nextval(pg_get_serial_sequence('{table_name}', 'id')) "
+                    f"FROM generate_series(1, %s)",
+                    (missing,),
+                )
+                new_ids = [row[0] for row in cur.fetchall()]
+            new_ids_iter = iter(new_ids)
 
-                cur.execute(f"""
-                    INSERT INTO {table_name} (
-                        id, chunk_key, accession_no, cik, item, section_id, table_id, seq,
-                        page_start, page_end, page_label, is_table, text, embed_text, token_count
-                    ) VALUES (COALESCE(%s, nextval(pg_get_serial_sequence('{table_name}', 'id'))),
-                              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    chunk.get("id"),
-                    chunk.get("chunk_key"),
-                    chunk.get("accession_no"),
-                    chunk.get("cik"),
-                    chunk.get("item"),
-                    chunk.get("section_id"),
-                    chunk.get("table_id"),
-                    chunk.get("seq", 0),
-                    chunk.get("page_start", 0),
-                    chunk.get("page_end", 0),
-                    chunk.get("page_label"),
-                    chunk.get("is_table", False),
-                    chunk.get("text", ""),
-                    chunk.get("embed_text", ""),
-                    chunk.get("token_count", 0),
-                ))
+            with cur.copy(f"COPY {table_name} ({columns_sql}) FROM STDIN") as copy:
+                for chunk in batch:
+                    row_id = chunk.get("id")
+                    if row_id is None:
+                        row_id = next(new_ids_iter)
+                    copy.write_row((
+                        row_id,
+                        chunk.get("chunk_key"),
+                        chunk.get("accession_no"),
+                        chunk.get("cik"),
+                        chunk.get("item"),
+                        chunk.get("section_id"),
+                        chunk.get("table_id"),
+                        chunk.get("seq", 0),
+                        chunk.get("page_start", 0),
+                        chunk.get("page_end", 0),
+                        chunk.get("page_label"),
+                        chunk.get("is_table", False),
+                        chunk.get("text", ""),
+                        chunk.get("embed_text", ""),
+                        chunk.get("token_count", 0),
+                    ))
 
         # Keep the serial in step with explicit ids, so later inserts do not collide.
         cur.execute(

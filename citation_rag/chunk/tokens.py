@@ -13,16 +13,19 @@ from functools import lru_cache
 MODEL_ID = "BAAI/bge-small-en-v1.5"
 
 
-def _configure_offline_env() -> None:
+def _configure_offline_env() -> str:
     """Point the `huggingface_hub` cache lookup at the project's cache.
 
     `citation_rag.settings.Settings.hf_home` (from `.env`) gives the cache
-    root, for example `.../Citation_Rag/.cache/hf`. Recent `huggingface_hub`
-    versions resolve the *download* cache to `$HF_HOME/hub` by default, but
-    this project's cache was populated directly under `$HF_HOME` (no `hub`
-    subfolder) -- so `HF_HOME` alone is not enough; `HF_HUB_CACHE` must be
-    set to the same path explicitly. Environment variables already set (for
-    example by a test or a caller) are left alone.
+    root, for example `.../Citation_Rag/.cache/hf`, now always an absolute
+    path (integration-1 item 6). Returns that path so the caller can also
+    pass it straight to `from_pretrained(..., cache_dir=...)`: relying on
+    `HF_HUB_CACHE`/`HF_HOME` env var ordering is fragile, since
+    `huggingface_hub` reads them into a frozen constant the first time it is
+    imported anywhere in the process, so a module imported earlier can lock
+    in a different cache dir before this function ever runs. Environment
+    variables already set (for example by a test or a caller) are left
+    alone.
     """
     from citation_rag.settings import Settings
 
@@ -30,15 +33,16 @@ def _configure_offline_env() -> None:
     os.environ.setdefault("HF_HOME", settings.hf_home)
     os.environ.setdefault("HF_HUB_CACHE", settings.hf_home)
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    return settings.hf_home
 
 
 @lru_cache(maxsize=1)
 def get_tokenizer():
     """Return the cached bge-small tokenizer instance (fast, offline)."""
-    _configure_offline_env()
+    hf_home = _configure_offline_env()
     from transformers import AutoTokenizer
 
-    return AutoTokenizer.from_pretrained(MODEL_ID)
+    return AutoTokenizer.from_pretrained(MODEL_ID, cache_dir=hf_home)
 
 
 def count_tokens(text: str) -> int:

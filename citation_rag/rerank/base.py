@@ -13,15 +13,11 @@ retriever` (wave 5a, written in parallel by another agent) returns its own
 `RerankedResult.from_result` reads a candidate structurally, by attribute,
 not by exact type, so either `Result` or `ScoredResult` works as input.
 
-Orchestrator note: as of this wave, `citation_rag.search.retriever.
-Retriever` does not yet accept the `reranker=` argument the wave-5a contract
-describes -- that file is owned by the parallel search agent and does not
-have the hook wired in yet. Nothing in this package depends on that hook:
+Integration-1 item 1: `citation_rag.search.retriever.Retriever` now accepts
+`reranker=` directly (applied after RRF fusion, before the per-company cut
+and the general cap). Nothing in this package needed to change for that:
 every `Reranker` here is a standalone `rerank(question, candidates, top)`
-call, so it plugs in unchanged once the hook lands.
-`citation_rag/rerank/experiments.py` works around the gap in the meantime
-with its own wrapper (see the note there). No file outside `citation_rag/
-rerank/` was edited.
+call, so it plugs into the retriever's hook unchanged.
 """
 
 from __future__ import annotations

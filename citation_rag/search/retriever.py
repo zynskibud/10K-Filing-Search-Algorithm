@@ -10,13 +10,20 @@ does not break that contract).
 Steps (plan section 8 and the System tab):
 1. Route: use the given `companies`, or call `router.route(question)`.
 2. For each named company: BM25 and/or vector search filtered to that cik,
-   RRF fusion when hybrid, keep `per_company_top` after fusion. (Reranking
-   is an optional step added between fusion and this cut in wave 6; there is
-   none here.)
-3. For "general": unfiltered search, then cap `general_cap` per cik so one
-   filing cannot fill the list.
+   RRF fusion when hybrid, then (when `reranker` is set) the reranker
+   reorders the whole fused candidate pool, then keep `per_company_top`.
+3. For "general": unfiltered search, optional rerank, then cap
+   `general_cap` per cik so one filing cannot fill the list.
 4. Results across companies are concatenated (small-to-big parent lookup and
    prompt assembly happen downstream, in the answer stage, not here).
+
+Integration-1 item 1: `reranker` (any `citation_rag.rerank.base.Reranker`,
+or `None`) is applied after RRF fusion and before the per-company cut and
+before the general cap. It reorders the fused candidate pool (asking for
+`top=len(candidates)` so nothing is dropped at this step); the existing
+`per_company_top`/`general_cap` slicing then runs on that reordered list,
+unchanged. Each result keeps its `scores` dict (bm25/vector/rrf) and also
+gets `rerank_score` set when a reranker ran (`None` otherwise).
 """
 
 from __future__ import annotations
@@ -33,7 +40,8 @@ VALID_METHODS = {"bm25", "vector", "hybrid"}
 
 
 class ScoredResult(NamedTuple):
-    """Same shape as `citation_rag.evals.runner.Result`, plus `scores` for the log."""
+    """Same shape as `citation_rag.evals.runner.Result`, plus `scores` for the
+    log and `rerank_score` (set only when a reranker ran; `None` otherwise)."""
 
     chunk_id: object
     text: str
@@ -44,6 +52,7 @@ class ScoredResult(NamedTuple):
     page_end: int | None
     accession_no: str
     scores: dict[str, float | None]
+    rerank_score: float | None = None
 
 
 @dataclass
@@ -56,6 +65,7 @@ class Retriever:
     per_company_top: int = 4
     general_cap: int = 2
     router: Router | None = None
+    reranker: Any | None = None  # citation_rag.rerank.base.Reranker, applied after fusion
     schema: str | None = None  # Postgres schema override, for tests (test_wave5)
     bm25_index: BM25Index | None = None  # lazy-loaded from disk if not given
     pool: Any = None
@@ -126,6 +136,7 @@ class Retriever:
         ids: Sequence[object],
         rows: dict[object, dict],
         scores_map: dict[object, dict[str, float | None]],
+        rerank_scores: dict[object, float | None] | None = None,
     ) -> list[ScoredResult]:
         out = []
         for doc_id in ids:
@@ -143,21 +154,53 @@ class Retriever:
                     page_end=row.get("page_end"),
                     accession_no=row["accession_no"],
                     scores=scores_map.get(doc_id, {"bm25": None, "vector": None, "rrf": None}),
+                    rerank_score=(rerank_scores.get(doc_id) if rerank_scores else None),
                 )
             )
         return out
+
+    def _rerank_order(
+        self,
+        question: str,
+        ranked_ids: Sequence[object],
+        rows: dict[object, dict],
+        scores_map: dict[object, dict[str, float | None]],
+    ) -> tuple[list[object], dict[object, float | None]]:
+        """Reorder `ranked_ids` with `self.reranker`, over the whole fused
+        pool (`top=len(candidates)`, so nothing is dropped here -- the
+        per-company/general cut, downstream, does the dropping)."""
+        candidates = self._to_results(ranked_ids, rows, scores_map)
+        if not candidates:
+            return list(ranked_ids), {}
+        reranked = self.reranker.rerank(question, candidates, top=len(candidates))
+        new_ids = [r.chunk_id for r in reranked]
+        rerank_scores = {r.chunk_id: r.rerank_score for r in reranked}
+        return new_ids, rerank_scores
 
     # -- per-company and general searches ------------------------------------
 
     def _search_company(self, question: str, cik: str) -> list[ScoredResult]:
         ranked_ids, scores_map = self._ranked_with_scores(question, ciks=[cik])
-        top_ids = ranked_ids[: self.per_company_top]
-        rows = vector.fetch_rows(self.index_name, top_ids, schema=self.schema, pool=self.pool)
-        return self._to_results(top_ids, rows, scores_map)
+        rerank_scores: dict[object, float | None] = {}
+
+        if self.reranker is not None and ranked_ids:
+            rows_all = vector.fetch_rows(self.index_name, ranked_ids, schema=self.schema, pool=self.pool)
+            ranked_ids, rerank_scores = self._rerank_order(question, ranked_ids, rows_all, scores_map)
+            top_ids = ranked_ids[: self.per_company_top]
+            rows = {doc_id: rows_all[doc_id] for doc_id in top_ids if doc_id in rows_all}
+        else:
+            top_ids = ranked_ids[: self.per_company_top]
+            rows = vector.fetch_rows(self.index_name, top_ids, schema=self.schema, pool=self.pool)
+
+        return self._to_results(top_ids, rows, scores_map, rerank_scores)
 
     def _search_general(self, question: str) -> list[ScoredResult]:
         ranked_ids, scores_map = self._ranked_with_scores(question, ciks=None)
         rows = vector.fetch_rows(self.index_name, ranked_ids, schema=self.schema, pool=self.pool)
+        rerank_scores: dict[object, float | None] = {}
+
+        if self.reranker is not None and ranked_ids:
+            ranked_ids, rerank_scores = self._rerank_order(question, ranked_ids, rows, scores_map)
 
         per_cik_count: dict[str, int] = {}
         capped_ids: list[object] = []
@@ -171,7 +214,7 @@ class Retriever:
             per_cik_count[cik] = per_cik_count.get(cik, 0) + 1
             capped_ids.append(doc_id)
 
-        return self._to_results(capped_ids, rows, scores_map)
+        return self._to_results(capped_ids, rows, scores_map, rerank_scores)
 
     # -- the harness-facing callable ------------------------------------------
 

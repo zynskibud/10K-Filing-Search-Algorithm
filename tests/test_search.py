@@ -552,6 +552,89 @@ def test_retriever_uses_oracle_router_when_companies_not_given(pg_schema, bm25_f
 
 
 # --------------------------------------------------------------------------
+# Integration-1 item 1: the retriever's reranker hook (none, mmr)
+# --------------------------------------------------------------------------
+
+
+@pg_required
+def test_retriever_none_reranker_keeps_fusion_order_and_sets_rerank_score(
+    pg_schema, bm25_fixture_index
+):
+    from citation_rag.rerank.none import NoneReranker
+
+    schema, index_name = pg_schema
+    question = "What does the company say about revenue growth and its results of operations?"
+
+    plain = Retriever(
+        index_name=index_name,
+        method="hybrid",
+        k=50,
+        per_company_top=4,
+        schema=schema,
+        bm25_index=bm25_fixture_index,
+        embed_query_fn=embed_query,
+    )
+    with_none = Retriever(
+        index_name=index_name,
+        method="hybrid",
+        k=50,
+        per_company_top=4,
+        schema=schema,
+        bm25_index=bm25_fixture_index,
+        embed_query_fn=embed_query,
+        reranker=NoneReranker(),
+    )
+
+    plain_results = plain(question, companies=["0000000001"])
+    reranked_results = with_none(question, companies=["0000000001"])
+
+    # The identity reranker must not change fusion order or which chunks
+    # are kept, only add the rerank_score field.
+    assert [r.chunk_id for r in plain_results] == [r.chunk_id for r in reranked_results]
+    assert all(r.rerank_score is None for r in plain_results)
+    assert all(r.rerank_score is not None for r in reranked_results)
+    # scores (bm25/vector/rrf) are untouched by reranking.
+    for plain_r, reranked_r in zip(plain_results, reranked_results):
+        assert plain_r.scores == reranked_r.scores
+
+
+@pg_required
+def test_retriever_mmr_reranker_respects_per_company_cut(pg_schema, bm25_fixture_index):
+    from citation_rag.rerank.mmr import MMRReranker
+
+    schema, index_name = pg_schema
+    table = vector_mod.table_name(index_name, schema=schema)
+
+    def vector_lookup(chunk_ids):
+        with vector_mod.get_pool().connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"SELECT id, embedding::text FROM {table} WHERE id = ANY(%s)",
+                    (list(chunk_ids),),
+                )
+                return {row[0]: json.loads(row[1]) for row in cur.fetchall()}
+
+    retriever = Retriever(
+        index_name=index_name,
+        method="hybrid",
+        k=50,
+        per_company_top=3,
+        schema=schema,
+        bm25_index=bm25_fixture_index,
+        embed_query_fn=embed_query,
+        reranker=MMRReranker(vector_lookup=vector_lookup, embed_query_fn=embed_query),
+    )
+    results = retriever(
+        "What does the company say about revenue growth and its results of operations?",
+        companies=["0000000001"],
+    )
+    assert len(results) == 3  # per_company_top respected after reranking
+    assert all(isinstance(r, ScoredResult) for r in results)
+    assert all(r.rerank_score is not None for r in results)
+    assert all(r.accession_no.startswith("0000000001") for r in results)
+
+
+# --------------------------------------------------------------------------
 # experiments.py: dry-run matrix
 # --------------------------------------------------------------------------
 

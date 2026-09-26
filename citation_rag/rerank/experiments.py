@@ -9,12 +9,11 @@ happens later, through `scripts/run.sh 6`, once waves 4-5 have picked a
 winning index and search method and the GPU class is free (the
 `llm_listwise` reranker needs a live Ollama daemon).
 
-Orchestrator note: `run_rerank_experiment` (the non-dry-run path) composes
-`citation_rag.search.retriever.Retriever` with a reranker itself, because
-that class does not yet accept the `reranker=` argument the wave-5a contract
-describes (see `citation_rag/rerank/base.py`'s module docstring). Once that
-hook exists, `_wrap_with_reranker` below can be deleted and `reranker=`
-passed straight into `Retriever(...)`.
+Integration-1 item 1: `citation_rag.search.retriever.Retriever` now takes
+`reranker=` directly (applied after RRF fusion, before the per-company cut
+and the general cap), so `run_rerank_experiment` passes each reranker
+straight into the `Retriever` it builds, instead of composing a wrapper
+callable around a separately-configured retriever.
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ import argparse
 import sys
 import time
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 RERANKER_NAMES = ["none", "mmr", "colbert", "cross_encoder", "monot5", "llm_listwise"]
 
@@ -74,22 +73,6 @@ def print_dry_run(index: str, search: str) -> None:
         print(f"  index={row['index']} search={row['search']} reranker={row['reranker']}")
 
 
-def _wrap_with_reranker(
-    base_retriever: Callable[..., Any], reranker: Any, top: int
-) -> Callable[[str, Any], list[Any]]:
-    """Compose a retriever callable and a reranker into one run_eval-shaped
-    callable, working around `Retriever` not yet having a `reranker=` hook
-    (see the module docstring). `base_retriever` should be configured with a
-    generous `per_company_top`/`general_cap` (`CANDIDATE_K`) so its output
-    approximates the pre-rerank 50-candidate pool the contract describes."""
-
-    def run(question: str, companies: Any) -> list[Any]:
-        candidates = base_retriever(question, companies)
-        return reranker.rerank(question, candidates, top=top)
-
-    return run
-
-
 def run_rerank_experiment(
     index: str,
     search: str,
@@ -109,17 +92,18 @@ def run_rerank_experiment(
     rows: list[dict[str, Any]] = []
     for name in RERANKER_NAMES:
         reranker = build_reranker(name, **reranker_kwargs.get(name, {}))
-        base = Retriever(
+        retriever = Retriever(
             index_name=index,
             method=search,
             k=CANDIDATE_K,
-            per_company_top=CANDIDATE_K,
-            general_cap=CANDIDATE_K,
+            top=TOP_K,
+            per_company_top=TOP_K,
+            general_cap=TOP_K,
+            reranker=reranker,
         )
-        wrapped = _wrap_with_reranker(base, reranker, top=TOP_K)
         config = {"index": index, "search": search, "reranker": name, "k": TOP_K, "top": TOP_K}
         t0 = time.perf_counter()
-        record = run_eval(config, "dev", wrapped, results_dir=results_dir)
+        record = run_eval(config, "dev", retriever, results_dir=results_dir)
         wall_s = time.perf_counter() - t0
         rows.append(
             {

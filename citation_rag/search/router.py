@@ -13,15 +13,39 @@
   for the vague/colloquial cases, e.g. "the iPhone maker"). A candidate that
   does not resolve is reported in `unresolved` rather than silently dropped,
   so the answer step can say "that company is not in our corpus."
+
+Integration-1 item 2: `LLMClient`, `FakeLLMClient`, and `OllamaClient` now
+live in `citation_rag.llm` (the client shared by the router, the listwise
+reranker, the answer stage, and the judge) and are re-exported here so every
+existing `from citation_rag.search.router import ...` keeps working.
+
+Integration-1 item 2b: the extraction prompt is loaded from
+`evals/prompts/router.v1.md` (the file wave 7a mirrored) instead of an
+inline string, so it is versioned like every other prompt in the project.
+`EXTRACT_PROMPT_TEMPLATE` is that file's contents, read once at import time.
 """
 
 from __future__ import annotations
 
 import json
-import os
 import re
 from dataclasses import dataclass, field
-from typing import Any, Callable, Protocol, Sequence
+from pathlib import Path
+from typing import Any, Protocol, Sequence
+
+from citation_rag.llm import FakeLLMClient, LLMClient, OllamaClient  # noqa: F401  (re-exported)
+
+__all__ = [
+    "Router",
+    "OracleRouter",
+    "LLMClient",
+    "FakeLLMClient",
+    "OllamaClient",
+    "EXTRACT_PROMPT_TEMPLATE",
+    "DEFAULT_ALIASES",
+    "normalize_name",
+    "LLMRouter",
+]
 
 
 class Router(Protocol):
@@ -43,84 +67,18 @@ class OracleRouter:
 
 
 # --------------------------------------------------------------------------
-# LLM clients
-# --------------------------------------------------------------------------
-
-
-class LLMClient(Protocol):
-    model: str
-
-    def complete(self, prompt: str) -> str: ...  # pragma: no cover - protocol
-
-
-class FakeLLMClient:
-    """Test double for LLMClient.
-
-    `responses` is either a single string (always returned), a list of
-    strings (consumed in order, one per call), or a callable(prompt) -> str.
-    """
-
-    def __init__(self, responses: "str | list[str] | Callable[[str], str]", model: str = "fake"):
-        self.responses = responses
-        self.model = model
-        self._queue = list(responses) if isinstance(responses, list) else None
-
-    def complete(self, prompt: str) -> str:
-        if callable(self.responses):
-            return self.responses(prompt)
-        if isinstance(self.responses, str):
-            return self.responses
-        if self._queue is not None:
-            if not self._queue:
-                raise RuntimeError("FakeLLMClient response queue exhausted")
-            return self._queue.pop(0)
-        raise RuntimeError("FakeLLMClient has no usable responses")
-
-
-@dataclass
-class OllamaClient:
-    """Real client over the local Ollama HTTP API. Never called in this wave's tests."""
-
-    model: str = "qwen3:8b"
-    temperature: float = 0.0
-    base_url: str | None = None
-
-    def complete(self, prompt: str) -> str:
-        import httpx
-
-        url = self.base_url or os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
-        resp = httpx.post(
-            f"{url}/api/generate",
-            json={
-                "model": self.model,
-                "prompt": prompt,
-                "format": "json",
-                "stream": False,
-                "options": {"temperature": self.temperature},
-            },
-            timeout=60,
-        )
-        resp.raise_for_status()
-        return resp.json()["response"]
-
-
-# --------------------------------------------------------------------------
 # LLMRouter
 # --------------------------------------------------------------------------
 
-EXTRACT_PROMPT_TEMPLATE = """You read one question about SEC 10-K filings. Pull out every company \
-the question names, by any form: full legal name, short name, ticker \
-symbol, or a clear description (for example "the iPhone maker").
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+ROUTER_PROMPT_PATH = PROJECT_ROOT / "evals" / "prompts" / "router.v1.md"
 
-Question: {question}
 
-Reply with JSON only, in this exact shape:
-{{"candidates": [{{"name": "<company name or description, or null>", \
-"ticker": "<ticker symbol, or null>"}}], "none": <true if no company is named>}}
+def _load_extract_prompt_template() -> str:
+    return ROUTER_PROMPT_PATH.read_text(encoding="utf-8")
 
-If the question names no company (a general question), reply with an empty \
-"candidates" list and "none": true.
-"""
+
+EXTRACT_PROMPT_TEMPLATE = _load_extract_prompt_template()
 
 # A small alias table for names the router should resolve to a corpus
 # company's canonical, normalized name even when the LLM does not spell out

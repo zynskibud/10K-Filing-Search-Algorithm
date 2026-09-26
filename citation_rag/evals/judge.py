@@ -4,15 +4,21 @@ scores. The reason is asked for before the label in every prompt.
 
 No Ollama inference happens in this wave: OllamaJudge is written here for wave
 7 to use, but every test in tests/test_evals.py uses FakeJudge only.
+
+Integration-1 item 3: `OllamaJudge` now makes its call through
+`citation_rag.llm.OllamaClient` (the client shared with the router, the
+listwise reranker, and the answer stage) with the shared 900s default
+timeout, instead of its own inline `httpx` call.
 """
 
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Protocol
+
+from citation_rag.llm import DEFAULT_TIMEOUT, OllamaClient
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PROMPTS_DIR = PROJECT_ROOT / "evals" / "prompts"
@@ -69,29 +75,27 @@ class FakeJudge:
 
 @dataclass
 class OllamaJudge:
-    """Real judge client over the Ollama HTTP API. Not exercised in this wave."""
+    """Real judge client, built on the shared `citation_rag.llm.OllamaClient`.
+    Not exercised in this wave: every test uses `FakeJudge`."""
 
     model: str = "gpt-oss:20b"
     temperature: float = 0.0
     base_url: str | None = None
+    timeout: float = DEFAULT_TIMEOUT
+
+    _client: OllamaClient | None = field(default=None, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self._client = OllamaClient(
+            model=self.model,
+            temperature=self.temperature,
+            base_url=self.base_url,
+            timeout=self.timeout,
+            format="json",
+        )
 
     def complete(self, prompt: str) -> str:
-        import httpx
-
-        url = self.base_url or os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
-        resp = httpx.post(
-            f"{url}/api/generate",
-            json={
-                "model": self.model,
-                "prompt": prompt,
-                "format": "json",
-                "stream": False,
-                "options": {"temperature": self.temperature},
-            },
-            timeout=120,
-        )
-        resp.raise_for_status()
-        return resp.json()["response"]
+        return self._client.complete(prompt)
 
 
 def _load_prompt(name: str, version: str = "v1") -> str:

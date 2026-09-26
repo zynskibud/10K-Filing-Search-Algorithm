@@ -7,15 +7,14 @@ and asks for JSON: a list of candidate numbers from most to least relevant.
 The response is parsed; any candidate number missing from the list (or the
 whole response, if it does not parse) falls back to fusion order.
 
-The LLM client is `citation_rag.search.router`'s (`LLMClient` protocol,
-`FakeLLMClient`, `OllamaClient`) -- imported here, not duplicated, per the
-contract. Ollama's "thinking off" switch (`"think": false`) is a call
-option on the client, not on this reranker; `router.OllamaClient.complete`
-does not yet expose it (it only sends `temperature`). That is the search
-agent's file, so it is not edited here -- this reranker only ever calls
-`client.complete(prompt)`, so it will pick up thinking-control transparently
-whenever the shared client gains it. No Ollama calls happen in this wave's
-tests: `FakeLLMClient` stands in.
+The LLM client is `citation_rag.llm`'s canonical one (`LLMClient` protocol,
+`FakeLLMClient`, `OllamaClient`), shared with the router, the answer stage,
+and the judge (integration-1 item 2) -- imported here, not duplicated.
+Ollama's "thinking off" switch (`"think": false`) is a call option on that
+client (`OllamaClient(think=False)`), not on this reranker; this reranker
+only ever calls `client.complete(prompt)`, so it picks up thinking control
+transparently from whatever client it is given. No Ollama calls happen in
+this wave's tests: `FakeLLMClient` stands in.
 """
 
 from __future__ import annotations
@@ -25,8 +24,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
+from citation_rag.llm import LLMClient  # re-exported for callers; not duplicated
 from citation_rag.rerank.base import RerankedResult
-from citation_rag.search.router import LLMClient  # re-exported for callers; not duplicated
 
 TRUNCATE_TOKENS = 300
 
