@@ -172,7 +172,7 @@ def test_chunk_table_creation(test_db: tuple[psycopg.Connection, str]) -> None:
         columns = [row[0] for row in cur.fetchall()]
 
     expected_columns = [
-        "id", "accession_no", "cik", "item", "section_id", "table_id",
+        "id", "chunk_key", "accession_no", "cik", "item", "section_id", "table_id",
         "seq", "page_start", "page_end", "page_label", "is_table",
         "text", "embed_text", "embedding", "token_count"
     ]

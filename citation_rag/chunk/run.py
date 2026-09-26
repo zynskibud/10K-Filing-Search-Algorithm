@@ -27,6 +27,7 @@ from . import prose, tables
 
 SCHEMA_ROW_ORDER = (
     "id",
+    "chunk_key",
     "accession_no",
     "cik",
     "item",
@@ -66,7 +67,8 @@ def chunk_one_filing(filing: dict, strategy: str, table_option: int) -> list[dic
     rows = []
     for seq, chunk in enumerate(prose_chunks + table_chunks, start=1):
         row = {
-            "id": f"{accession_no}:{seq:06d}",
+            "id": None,  # global integer id, assigned in run()
+            "chunk_key": f"{accession_no}:{seq:06d}",
             "accession_no": accession_no,
             "cik": chunk.get("cik"),
             "item": chunk.get("item"),
@@ -106,6 +108,11 @@ def run(strategy: str, table_option: int, out: str, parsed_dir: str, filings: li
             n_skipped += 1
             continue
         all_rows.extend(chunk_one_filing(filing, strategy, table_option))
+    # One integer id per chunk, stable for a given input order. The loader
+    # inserts it explicitly, and the embedder saves it next to each vector,
+    # so all three agree on the id.
+    for i, row in enumerate(all_rows, start=1):
+        row["id"] = i
 
     out_path = Path(out)
     out_path.parent.mkdir(parents=True, exist_ok=True)

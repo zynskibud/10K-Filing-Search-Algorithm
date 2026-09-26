@@ -158,10 +158,13 @@ def load_chunks(
 
                 cur.execute(f"""
                     INSERT INTO {table_name} (
-                        accession_no, cik, item, section_id, table_id, seq,
+                        id, chunk_key, accession_no, cik, item, section_id, table_id, seq,
                         page_start, page_end, page_label, is_table, text, embed_text, token_count
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ) VALUES (COALESCE(%s, nextval(pg_get_serial_sequence('{table_name}', 'id'))),
+                              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
+                    chunk.get("id"),
+                    chunk.get("chunk_key"),
                     chunk.get("accession_no"),
                     chunk.get("cik"),
                     chunk.get("item"),
@@ -177,6 +180,11 @@ def load_chunks(
                     chunk.get("token_count", 0),
                 ))
 
+        # Keep the serial in step with explicit ids, so later inserts do not collide.
+        cur.execute(
+            f"SELECT setval(pg_get_serial_sequence('{table_name}', 'id'), "
+            f"GREATEST((SELECT COALESCE(MAX(id), 1) FROM {table_name}), 1))"
+        )
     conn.commit()
 
 

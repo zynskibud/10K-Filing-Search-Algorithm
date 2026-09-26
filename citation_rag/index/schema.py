@@ -132,6 +132,7 @@ def create_chunk_table(
         cur.execute(f"""
             CREATE TABLE IF NOT EXISTS {table_name} (
                 id BIGSERIAL PRIMARY KEY,
+                chunk_key TEXT,
                 accession_no TEXT NOT NULL,
                 cik TEXT NOT NULL,
                 item TEXT NOT NULL,
