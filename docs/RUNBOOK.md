@@ -31,3 +31,8 @@ mkdir ../.coord/gpu.lock && echo "citation-rag <wave> <ISO time>" > ../.coord/gp
 - Python runs in the project `.venv`. Models load from the project `.cache/hf` with `HF_HUB_OFFLINE=1`.
 - Postgres runs in the container `citation-rag-db` on port 5433 with a 2 GB memory limit.
 - No writes outside the project folder, except the Docker named volume.
+
+## Environment
+
+- Default environment: `uv sync --extra dev` (pytest and ruff live in the `dev` extra). A plain `uv sync` removes them.
+- Framework comparison only: `uv run --group langgraph ...` installs LangGraph and LangChain into the same venv for that command. Run `uv sync --extra dev` afterwards to return to the framework-free state.
