@@ -135,10 +135,19 @@ def clean_tree(tree):
         etree.strip_elements(tree, tagname, with_tail=False)
 
     # Every other ix:* element: unwrap, keeping text/tail/children in place.
+    # ix:nonFraction is the one exception: wave 2b/2c's table extractor
+    # (citation_rag/parse/tables.py) finds tagged numeric facts by walking
+    # this same cleaned tree for elements literally named "ix:nonfraction"
+    # (see `_collect_nonfraction`), so unwrapping it here would silently
+    # zero out every xbrl-coverage number downstream. Leaving the element
+    # in place does not affect prose extraction: every text-reading helper
+    # in this codebase (`norm_text`/`_cell_text`) walks `.text_content()`/
+    # `.itertext()`, which already flattens text through an un-stripped
+    # wrapper tag exactly as it would through a <span>.
     ix_tags = set()
     for el in tree.iter():
         tag = el.tag
-        if isinstance(tag, str) and tag.lower().startswith(IX_PREFIX):
+        if isinstance(tag, str) and tag.lower().startswith(IX_PREFIX) and tag.lower() != "ix:nonfraction":
             ix_tags.add(tag)
     if ix_tags:
         etree.strip_tags(tree, *ix_tags)

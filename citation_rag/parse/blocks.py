@@ -10,6 +10,7 @@ caller, not by this module).
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 BLOCK_TAGS = {"p", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6"}
@@ -17,6 +18,20 @@ BLOCK_TAGS = {"p", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6"}
 # table-of-contents row commonly puts "Item 1." in its own <td>, separate
 # from the title and page-number cells.
 HEADING_EXTRA_TAGS = {"td", "th"}
+
+# A <div>/<p>/... wrapping just part of a sentence -- often only its first
+# word, for emphasis or letter-spacing -- but styled `display:inline` (not
+# `inline-block`, which still lays out as a box) renders as ordinary
+# running text, not a real nested block. Counting it as one anyway made
+# `has_block_child` skip the *whole* paragraph as "not a leaf", which
+# throws away everything after that wrapper: its own text is captured
+# (norm_text on the wrapper alone), but the rest of the sentence sits in
+# the wrapper's *tail*, which belongs to the parent's text flow and is
+# never read by anyone once the parent itself is skipped (found via
+# Infleqtion's real filing: Item 2's body was a `<div style="margin-top:
+# 6pt;..."><div style="display:inline;">We</div> currently lease
+# facilities...</div>` -- Item 2 kept only the word "We").
+_INLINE_STYLE_RE = re.compile(r"display\s*:\s*inline\b(?!-)", re.I)
 
 
 def norm_text(el) -> str:
@@ -32,10 +47,19 @@ def in_table(el) -> bool:
     return False
 
 
+def _is_inline_styled(el) -> bool:
+    style = el.get("style") if hasattr(el, "get") else None
+    return bool(style) and bool(_INLINE_STYLE_RE.search(style))
+
+
 def has_block_child(el, tags) -> bool:
     for child in el:
         ctag = child.tag
-        if isinstance(ctag, str) and (ctag in tags or ctag == "table"):
+        if not isinstance(ctag, str):
+            continue
+        if ctag == "table":
+            return True
+        if ctag in tags and not _is_inline_styled(child):
             return True
     return False
 
