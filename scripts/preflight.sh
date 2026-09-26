@@ -52,6 +52,13 @@ else
   ok "heavy lock free"
 fi
 
+# Legacy lock name. The protocol says heavy.lock is the old name for gpu.lock.
+if [ -d "$AI_ENGINEERING_ROOT/.coord/heavy.lock" ]; then
+  fail "heavy.lock (legacy GPU lock) held: $(cat "$AI_ENGINEERING_ROOT/.coord/heavy.lock/owner" 2>/dev/null)"
+else
+  ok "heavy.lock (legacy) free"
+fi
+
 # Timing lock: when a latency benchmark runs, nothing else may run.
 if [ -d "$AI_ENGINEERING_ROOT/.coord/timing.lock" ]; then
   fail "timing lock held: $(cat "$AI_ENGINEERING_ROOT/.coord/timing.lock/owner" 2>/dev/null)"

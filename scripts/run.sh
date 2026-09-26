@@ -53,6 +53,10 @@ LOG="$RUN_DIR/console.log"
 mkdir -p "$RUN_DIR"
 
 take_lock() {
+  if [ -d "$AI_ENGINEERING_ROOT/.coord/heavy.lock" ] || [ -d "$AI_ENGINEERING_ROOT/.coord/timing.lock" ]; then
+    echo "another lock is held (heavy.lock or timing.lock). Not starting." >&2
+    return 3
+  fi
   if ! mkdir "$LOCK_DIR" 2>/dev/null; then
     echo "heavy lock is held. Owner:" >&2
     cat "$LOCK_OWNER_FILE" >&2 2>/dev/null
