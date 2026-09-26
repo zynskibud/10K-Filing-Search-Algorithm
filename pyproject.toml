@@ -33,3 +33,14 @@ dev = [
 
 [tool.uv]
 managed = true
+
+[dependency-groups]
+langgraph = [
+    "langchain>=1.4.2",
+    "langchain-community>=0.4.2",
+    "langchain-huggingface>=1.2.2",
+    "langchain-ollama>=1.1.0",
+    "langchain-postgres>=0.0.18",
+    "langgraph>=1.2.12",
+    "rank-bm25>=0.2.2",
+]
