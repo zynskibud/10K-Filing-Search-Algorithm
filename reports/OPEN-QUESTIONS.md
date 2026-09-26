@@ -29,3 +29,7 @@ Format: wave, question, default taken, effect of the default.
 
 - **Wave 2a / thresholds.** Three parser checks used guessed limits that correct parses failed: the Item order check (filers put Item 16 before 15), the 0.95 text-coverage floor (short shell filings), and the 200-character "not required" rule. Defaults: exempt Items 15 and 16 from the order check, coverage floor 0.90, "not required" limit 1,000 characters. Effect: fewer false failures; a real truncated filing still fails the required-Items check.
 - **Wave 2a / a 10-Q-shaped "10-K".** Crona Corp filed a document indexed as 10-K whose Items follow the 10-Q structure. Default: it fails the parser's required-Items check and lands on the failure list, counted under `not_a_10k_structure`. Effect: excluded from the index, no manual fix.
+
+## Wave 4 (build)
+
+- **Wave 4c / bge-m3 time.** On CPU, bge-m3 embeds about 195 tokens per second and bge-small about 2,300. The corpus is about 120 million tokens per strategy. Even at 15 times the CPU speed on the GPU, one bge-m3 index takes about 10 hours, and the plan has four of them. Default, pending the measured GPU ETA at the start of wave 4: if a bge-m3 index exceeds 8 hours, run the chunking and embedding comparison (the 7 indexes) on a random 300-filing subset of the corpus, pick the winner there, and build only the winning index over the full 1,100 filings. Effect: the comparison stays fair (same subset for every index), the final system still covers the full corpus, and the GPU time drops from days to hours.
