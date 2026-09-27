@@ -25,6 +25,7 @@ from pathlib import Path
 from .filing import parse_filing
 from .items import ITEM_PARTS, ITEM_TITLES, STANDARD_ITEMS
 
+BATCH_SIZE = 50
 MAX_WORKERS = 4
 
 
@@ -151,22 +152,73 @@ def run(manifest_path: str, out_dir: str, workers: int, force: bool, limit: int 
 
     args = [(row, str(out), force) for row in rows]
 
+    # The machine protocol: when a timing benchmark takes .coord/timing.lock,
+    # CPU-BULK work stops cleanly. We check between batches and, on a stop,
+    # write the remaining rows to data/parse_resume.jsonl so the run can
+    # continue later with `scripts/parse.sh --force --manifest data/parse_resume.jsonl`.
+    timing_lock = Path(__file__).resolve().parents[3] / ".coord" / "timing.lock"
+    resume_path = out.parent / "parse_resume.jsonl"
+
     results = []
     start = time.time()
     n = len(args)
     workers = max(1, min(workers, MAX_WORKERS))
     ctx = mp.get_context("spawn")
+    done = 0
     with ctx.Pool(processes=workers) as pool:
-        for i, res in enumerate(pool.imap_unordered(_process_row, args), start=1):
-            results.append(res)
-            if i % 50 == 0 or i == n:
-                elapsed = time.time() - start
-                n_pass = sum(1 for r in results if r["passed"])
+        for b in range(0, n, BATCH_SIZE):
+            if timing_lock.exists():
+                remaining = rows[b:]
+                with resume_path.open("w", encoding="utf-8") as fh:
+                    for row in remaining:
+                        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
                 print(
-                    f"[{i}/{n}] elapsed={elapsed:.0f}s pass={n_pass}/{i}",
+                    f"STOP: timing.lock present after {done}/{n} rows; "
+                    f"{len(remaining)} remaining rows written to {resume_path}",
                     file=sys.stderr,
                 )
-    return results
+                return results, False
+            batch = args[b:b + BATCH_SIZE]
+            for res in pool.imap_unordered(_process_row, batch):
+                results.append(res)
+                done += 1
+            elapsed = time.time() - start
+            n_pass = sum(1 for r in results if r["passed"])
+            print(f"[{done}/{n}] elapsed={elapsed:.0f}s pass={n_pass}/{done}", file=sys.stderr)
+    if resume_path.exists():
+        resume_path.unlink()
+    return results, True
+
+
+def rebuild_failures(out_dir: str, failures_path: str) -> tuple[int, int]:
+    """Rebuild the failure list from every JSON in out_dir, so a run that
+    stopped and resumed still yields one complete list. Returns (n_files, n_failed)."""
+    out = Path(out_dir)
+    n_files = n_failed = 0
+    with open(failures_path, "w", encoding="utf-8") as fh:
+        for path in sorted(out.glob("*.json")):
+            try:
+                doc = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            n_files += 1
+            checks = doc.get("checks", {})
+            if checks.get("passed"):
+                continue
+            n_failed += 1
+            fh.write(
+                json.dumps(
+                    {
+                        "accession_no": doc.get("accession_no"),
+                        "company": doc.get("company"),
+                        "filer_category": doc.get("filer_category"),
+                        "failures": checks.get("failures", []),
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+    return n_files, n_failed
 
 
 def write_failures(results: list[dict], failures_path: str) -> int:
@@ -213,13 +265,16 @@ def main(argv=None):
             file=sys.stderr,
         )
 
-    results = run(args.manifest, args.out, args.workers, args.force, args.limit)
-    n_failed = write_failures(results, args.failures_out)
+    results, completed = run(args.manifest, args.out, args.workers, args.force, args.limit)
+    n_files, n_failed = rebuild_failures(args.out, args.failures_out)
 
     n = len(results)
-    n_pass = n - n_failed
-    print(f"Parsed {n} filings: {n_pass} passed, {n_failed} failed all checks.")
-    print(f"Failures written to {args.failures_out}")
+    n_pass = sum(1 for r in results if r["passed"])
+    print(f"This run parsed {n} filings: {n_pass} passed, {n - n_pass} failed a check.")
+    print(f"Failure list rebuilt from {n_files} parsed files: {n_failed} failing. Written to {args.failures_out}")
+    if not completed:
+        print("Stopped for timing.lock. Resume with: scripts/parse.sh --force --manifest data/parse_resume.jsonl")
+        sys.exit(3)
 
 
 if __name__ == "__main__":
