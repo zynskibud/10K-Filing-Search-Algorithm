@@ -197,15 +197,18 @@ def run_eta(
     from citation_rag.index.models import load_embedder
 
     results: dict[str, dict] = {}
+    embedders: dict[str, object] = {}
     for model_name, strategy in INDEX_CONFIGS:
         name = f"{model_name}__{strategy}"
-        chunks = embed_mod.read_chunks(chunk_paths[name])
-        if not chunks:
+        subset, n_chunks, full_tokens = embed_mod.sample_rows(chunk_paths[name], sample_fraction)
+        if not subset:
             results[name] = {"tokens_per_second": 0.0, "eta_hours": 0.0, "n_chunks": 0}
             continue
 
-        embedder = load_embedder(model_name, device=device)
-        subset = embed_mod.sort_by_length(embed_mod.sample_chunks(chunks, sample_fraction))
+        if model_name not in embedders:
+            embedders[model_name] = load_embedder(model_name, device=device)
+        embedder = embedders[model_name]
+        subset = embed_mod.sort_by_length(subset)
         texts = [c["embed_text"] for c in subset]
         sample_tokens = sum(c.get("token_count", 0) for c in subset)
 
@@ -214,13 +217,17 @@ def run_eta(
         elapsed = time.perf_counter() - start
 
         tokens_per_second = sample_tokens / elapsed if elapsed > 0 else float("inf")
-        full_tokens = sum(c.get("token_count", 0) for c in chunks)
         eta_hours = (full_tokens / tokens_per_second) / 3600.0 if tokens_per_second > 0 else float("inf")
         results[name] = {
             "tokens_per_second": tokens_per_second,
             "eta_hours": eta_hours,
-            "n_chunks": len(chunks),
+            "n_chunks": n_chunks,
         }
+        print(
+            f"[eta] {name}: {tokens_per_second:.0f} tok/s, {eta_hours:.2f} h for {n_chunks} chunks",
+            file=sys.stderr,
+            flush=True,
+        )
     return results
 
 
@@ -256,8 +263,7 @@ def run_full(chunk_paths: dict[str, Path], device: str) -> None:
 
     for model_name, strategy in INDEX_CONFIGS:
         name = f"{model_name}__{strategy}"
-        chunks = embed_mod.read_chunks(chunk_paths[name])
-        embed_mod.embed_chunks(name, chunks, device=device)
+        embed_mod.embed_file(name, chunk_paths[name], device=device)
 
 
 def build_bm25_all(names: "list[str] | None" = None) -> None:
