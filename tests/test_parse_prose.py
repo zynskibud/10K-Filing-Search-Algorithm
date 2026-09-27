@@ -260,6 +260,61 @@ def test_filer_category_br_joined_split():
 
 
 # ---------------------------------------------------------------------------
+# items.py: wave 2e -- a numbered heading with no word "Item" (Spruce Power
+# Holding Corp's real filing heads Item 1A "1A. Risk Factors"), and
+# checks.py -- required_items_present must fail on an absent required Item
+# whatever the filer category.
+# ---------------------------------------------------------------------------
+
+
+def test_numbered_title_heading_without_item_word_is_detected():
+    long_text = "Business description. " * 200
+    html = (
+        "<html><body>"
+        f'<div style="break-before: page">' + _item_heading("1", "Business") + "</div>"
+        f"<div>{long_text}</div>"
+        + "<div>1A. Risk Factors</div>"
+        + "<div>"
+        + "Risk factor text with no word Item anywhere in its own heading. " * 40
+        + "</div>"
+        + "<div>7. Management's Discussion and Analysis</div>"
+        + "<div>"
+        + "Discussion and analysis text with no word Item anywhere in its own heading. " * 40
+        + "</div>"
+        + "</body></html>"
+    )
+    tree = parse(html)
+    pages_result = assign_pages(tree)
+    items, content_blocks, stats = detect_items(tree, pages_result.page_for, pages_result.pages, None)
+    item1a = next(it for it in items if it["item"] == "1A")
+    item7 = next(it for it in items if it["item"] == "7")
+    assert item1a["status"] == "present"
+    assert item7["status"] == "present"
+
+
+def test_smaller_reporting_company_absent_item_1a_fails_required_check():
+    from citation_rag.parse.checks import REQUIRED_ITEMS, check_required_items_present
+
+    items = [
+        {"item": num, "status": "absent" if num == "1A" else "present"} for num in REQUIRED_ITEMS
+    ]
+    ok, detail = check_required_items_present(items, smaller_reporting=True)
+    assert not ok
+    assert "1A" in detail
+
+
+def test_not_required_item_passes_required_check_for_any_filer():
+    from citation_rag.parse.checks import REQUIRED_ITEMS, check_required_items_present
+
+    items = [
+        {"item": num, "status": "not_required" if num == "1A" else "present"} for num in REQUIRED_ITEMS
+    ]
+    for smaller_reporting in (True, False):
+        ok, detail = check_required_items_present(items, smaller_reporting=smaller_reporting)
+        assert ok, detail
+
+
+# ---------------------------------------------------------------------------
 # sections.py: splitting on headings, merging short sections, tables unwrap
 # ---------------------------------------------------------------------------
 

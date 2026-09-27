@@ -76,13 +76,31 @@ def _is_10q_structure(items) -> bool:
 
 
 def check_required_items_present(items, smaller_reporting) -> tuple[bool, str]:
+    """`smaller_reporting` is accepted for call-site compatibility but no
+    longer changes the outcome (wave 2e).
+
+    The old rule exempted a smaller reporting company from ever failing on
+    an `absent` required Item, on the theory that a smaller reporting
+    company may omit Items 1A/1B/6/7A. But `absent` already means no
+    heading was found *and* the raw-text cross-check in items.py
+    (`_has_forward_long_run`) could not back up a `not_required` read --
+    it is items.py's own signal that a heading was very likely missed, not
+    a legitimate omission (a legitimate omission is classified
+    `not_required`, not `absent`, and still passes this check below). The
+    exemption let exactly this population of filings pass with a required
+    Item silently missing (Spruce Power Holding Corp, a smaller reporting
+    company: Item 1A absent, `checks.passed` True, never on
+    `data/parse_failures.jsonl` -- see reports/wave-2d.md's "Spruce Power"
+    finding). Fails on any `absent` required Item now, for every filer
+    category; `not_required` is unaffected and still passes.
+    """
     if _is_10q_structure(items):
         return False, "not_a_10k_structure"
     bad = []
     for it in items:
         if it["item"] not in REQUIRED_ITEMS:
             continue
-        if it["status"] == "absent" and not smaller_reporting:
+        if it["status"] == "absent":
             bad.append(it["item"])
     if bad:
         return False, f"required Items absent: {', '.join(bad)}"

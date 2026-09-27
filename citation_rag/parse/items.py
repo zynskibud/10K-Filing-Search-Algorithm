@@ -108,6 +108,77 @@ COMBINED_RE = re.compile(
     rf"({_NUM_RE})(?!\.\d)\.?\s*(.*)$",
     re.I,
 )
+
+# ---------------------------------------------------------------------------
+# Wave 2e: a body heading that names the Item's number and canonical SEC
+# title, but never uses the word "Item" at all -- Spruce Power Holding
+# Corp's real filing heads its risk-factors section "1A. Risk Factors" as
+# its own block; "Item 1A" (with the word) shows up only in the table of
+# contents and in cross-references elsewhere in the document. ITEM_RE
+# requires "Item" (or the I/l typo forms wave 2d added), so this heading
+# was never detected at all, and the missing heading made Item 1A `absent`.
+# General rule, not a per-filing special case: any block under 200
+# characters shaped like "<number><sep><canonical title>", matched against
+# the title's first 3 words so a longer real heading still counts, and
+# gated on the title itself so an ordinary numbered sentence or a price
+# ("5. $1,000,000 offering") cannot match.
+# ---------------------------------------------------------------------------
+
+_NUMBERED_HEADING_SEP = r"[.:\-–—]"
+_NUMBERED_HEADING_NUM_RE = re.compile(rf"^\s*(\d{{1,2}}[A-C]?)\s*{_NUMBERED_HEADING_SEP}\s*(.*)$")
+
+# Item 6 has been "[Reserved]" since the SEC dropped "Selected Financial
+# Data" as a required Item in 2021 (see ITEM_TITLES's own comment history);
+# a numbered-only heading with no word "Item" can carry either title
+# depending on the filing's vintage, so both are accepted as Item 6's
+# canonical title here specifically.
+_NUMBERED_HEADING_TITLE_OVERRIDES = {"6": ["Reserved", "Selected Financial Data"]}
+
+
+def _numbered_heading_titles(item_num: str) -> list[str]:
+    if item_num in _NUMBERED_HEADING_TITLE_OVERRIDES:
+        return _NUMBERED_HEADING_TITLE_OVERRIDES[item_num]
+    return [ITEM_TITLES.get(item_num, "").strip("[]")]
+
+
+def _title_prefix_re(title: str, n_words: int = 3) -> re.Pattern | None:
+    """A case-insensitive regex matching the title's first `n_words` words,
+    anchored at the start of the candidate's trailing text."""
+    words = [w for w in title.split()[:n_words] if w]
+    if not words:
+        return None
+    pattern = r"\s+".join(re.escape(w) for w in words)
+    return re.compile(rf"^\s*{pattern}\b", re.I)
+
+
+_NUMBERED_HEADING_TITLE_RE = {
+    item_num: [p for p in (_title_prefix_re(t) for t in _numbered_heading_titles(item_num)) if p]
+    for item_num in STANDARD_ITEMS
+}
+
+
+def _match_numbered_title_heading(text: str):
+    """Match "<number><sep><canonical title>" with no word "Item" anywhere.
+
+    Returns a match object with the same two-group shape as ITEM_RE
+    (group(1) = raw item number, group(2) = trailing text) so callers can
+    treat it identically to an ITEM_RE match; returns None if `text` is not
+    shaped like a number followed by a separator, or if the trailing text
+    does not open with that item's own canonical title.
+    """
+    m = _NUMBERED_HEADING_NUM_RE.match(text)
+    if not m:
+        return None
+    item_num = normalize_item_num(m.group(1))
+    title_res = _NUMBERED_HEADING_TITLE_RE.get(item_num)
+    if not title_res:
+        return None
+    trailing = m.group(2)
+    if not any(tre.match(trailing) for tre in title_res):
+        return None
+    return m
+
+
 # The contract's phrase list is "not required", "not applicable", "none",
 # "reserved", "omitted"; "n/a" is added as the near-universal abbreviation
 # of "not applicable" for exactly this disclaimer (Item 4 and Item 9C are
@@ -241,6 +312,11 @@ def build_streams(root, page_for):
         if len(text) < 200:
             cm = COMBINED_RE.match(text)
             m = None if cm else ITEM_RE.match(text)
+            if cm is None and m is None:
+                # Wave 2e: no "Item" word anywhere in this block, but it may
+                # still be a real heading naming the Item's number and its
+                # canonical title (see _match_numbered_title_heading).
+                m = _match_numbered_title_heading(text)
             match = cm or m
             if match and not _is_cross_reference_quote(match.group(3) if cm else match.group(2)):
                 table_ancestor = nearest_table_ancestor(el)
