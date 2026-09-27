@@ -11,6 +11,7 @@ services:
     ports:
       - "5433:5432"
     mem_limit: 2g
+    cpus: 1
     volumes:
       - citation_rag_pgdata:/var/lib/postgresql/data
     healthcheck:

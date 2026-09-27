@@ -78,7 +78,8 @@ if [ "$RUNNER" -eq 1 ]; then
   take_lock || exit 3
   trap release_lock EXIT INT TERM HUP
   echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) start wave $WAVE pid $$: $COMMAND"
-  ( cd "$REPO_ROOT" && eval "$COMMAND" )
+  # Fixed cap from the protocol: heavy work runs at low priority.
+  ( cd "$REPO_ROOT" && nice -n 10 bash -c "$COMMAND" )
   code=$?
   echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) end wave $WAVE exit=$code"
   exit "$code"

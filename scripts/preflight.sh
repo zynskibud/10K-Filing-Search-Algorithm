@@ -13,7 +13,6 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 AI_ENGINEERING_ROOT="$(cd "$REPO_ROOT/.." && pwd)"
 LOCK_DIR="$AI_ENGINEERING_ROOT/.coord/gpu.lock"
 DISK_FAIL_GB=15
-LOAD_WARN=2
 HARD_FAIL=0
 
 ok()   { printf 'OK    %s\n' "$1"; }
@@ -23,14 +22,6 @@ fail() { printf 'FAIL  %s\n' "$1"; HARD_FAIL=1; }
 echo "Preflight for Citation RAG, $(date)"
 echo "Repo: $REPO_ROOT"
 echo
-
-# Load average over the last minute.
-load="$(sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}')"
-if [ -n "$load" ] && awk -v l="$load" -v w="$LOAD_WARN" 'BEGIN{exit !(l < w)}'; then
-  ok "load average $load (under $LOAD_WARN)"
-else
-  warn "load average ${load:-unknown} (at or over $LOAD_WARN): another job is busy"
-fi
 
 # Free disk on the root volume, in GB.
 free_gb="$(df -g / | awk 'NR==2 {print $4}')"

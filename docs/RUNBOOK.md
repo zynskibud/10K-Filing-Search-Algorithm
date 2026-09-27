@@ -7,13 +7,15 @@ The machine is shared. One HEAVY job runs at a time, under the coordinator's GPU
 1. **Waves 4 to 8 run only through `scripts/run.sh <wave>`.** Never start an embedding run, a Qwen run, or the judge with a bare `uv run` command. `run.sh` runs the preflight, takes the lock, runs the wave detached under `caffeinate -i`, and releases the lock when the wave ends or is killed.
 2. **Each HEAVY wave waits for the coordinator's GO** before `run.sh` is called.
 3. **Resource classes** (from the protocol): GPU (Ollama, embedding, MPS) one at a time under `gpu.lock` after GO; TIMING (Vector latency benchmarks) alone on the machine under `timing.lock`, during which only API work is allowed; CPU-BULK (parsing, index builds, test suites over one core) at most 4 workers, never during TIMING; LIGHT (code edits, one-core unit tests, subagents writing code, git) always, except during TIMING.
-4. **Stop for the human** only for: disk under 15 GB free, spend over $5, or a failed isolation check.
+4. **Fixed caps** (from the protocol): `citation-rag-db` at 1 CPU and 2 GB; any other container at 2 CPUs; host parse and build workers at most 4, started under `nice -n 10` (`scripts/run.sh` and `scripts/parse.sh` do this). This project manages only its own containers and processes and does not inspect other sessions' work.
+5. **Stop for the human** only for: disk under 15 GB free, spend over $5, or a failed isolation check.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `scripts/preflight.sh` | Checks load, disk, lock, Ollama, the Postgres container, and power. Exits 1 on disk under 15 GB or a lock held by another owner. |
+| `scripts/preflight.sh` | Checks disk, locks, Ollama, the Postgres container, and power. Exits 1 on disk under 15 GB, a GPU lock held by another owner, or timing.lock. |
+| `scripts/parse.sh` | The corpus parse: 4 workers, `nice -n 10`. |
 | `scripts/run.sh --dry-run <wave>` | Preflight, take and release the lock, print what would run. |
 | `scripts/run.sh <wave> [command]` | Preflight, then start the wave detached. The command comes from `scripts/waves.conf` when not given. Log: `runs/wave-<wave>/console.log`. |
 | `scripts/status.sh` | Lock owner, running wave runners, last log line per wave, Ollama models loaded, container health, disk. |
