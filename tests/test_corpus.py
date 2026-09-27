@@ -52,10 +52,10 @@ def test_manifest_no_duplicate_cik():
 
 
 def test_corpus_exists():
-    """Corpus should exist and have exactly 1,100 rows."""
+    """Corpus should exist and have at least 1,100 rows (1,333 after the wave 2d top-up)."""
     assert CORPUS_PATH.exists(), "corpus.jsonl does not exist"
     rows = load_jsonl(CORPUS_PATH)
-    assert len(rows) == 1100, f"corpus.jsonl has {len(rows)} rows, expected 1100"
+    assert len(rows) >= 1100, f"corpus.jsonl has {len(rows)} rows, expected at least 1100"
 
 
 def test_corpus_no_duplicate_accession():

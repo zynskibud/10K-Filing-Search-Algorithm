@@ -226,6 +226,193 @@ def test_validate_catches_company_mismatch(tmp_path):
 
 
 # --------------------------------------------------------------------------
+# golden set validation: per-evidence section_ids/table_ids (general, multi_part)
+# --------------------------------------------------------------------------
+
+
+def _write_minimal_filing(parsed_dir: Path, accession_no: str, cik: str, section_text: str, page: int) -> None:
+    section_id = f"{accession_no}:1A:001"
+    doc = {
+        "accession_no": accession_no,
+        "cik": cik,
+        "company": f"Co {cik}",
+        "items": [
+            {
+                "item": "1A",
+                "part": "I",
+                "title": "Risk Factors",
+                "status": "present",
+                "page_start": page,
+                "page_end": page,
+                "sections": [
+                    {
+                        "id": section_id,
+                        "seq": 1,
+                        "title": "Risk factors",
+                        "page_start": page,
+                        "page_end": page,
+                        "text": section_text,
+                        "tables": [],
+                    }
+                ],
+            }
+        ],
+        "tables": [],
+        "checks": {"passed": True, "failures": [], "stats": {}},
+    }
+    (parsed_dir / f"{accession_no}.json").write_text(json.dumps(doc), encoding="utf-8")
+
+
+def test_general_case_validates_with_parallel_section_ids(tmp_path):
+    parsed_dir = tmp_path / "parsed"
+    parsed_dir.mkdir()
+    accessions = ["0002222222-25-000001", "0003333333-25-000001", "0004444444-25-000001"]
+    evidences = [
+        "Company A discloses a supply chain risk in its filing.",
+        "Company B discloses a cybersecurity risk in its filing.",
+        "Company C discloses a litigation risk in its filing.",
+    ]
+    for acc, cik, ev in zip(accessions, ["0002222222", "0003333333", "0004444444"], evidences):
+        _write_minimal_filing(parsed_dir, acc, cik, ev, page=2)
+
+    case = {
+        "id": "g_general_0001",
+        "question": "What risk does each company disclose?",
+        "type": "general",
+        "companies": "general",
+        "accession_nos": accessions,
+        "section_ids": [f"{acc}:1A:001" for acc in accessions],
+        "table_ids": [None, None, None],
+        "evidence": evidences,
+        "page": [2, 2, 2],
+        "answer": "Supply chain, cybersecurity, and litigation risk respectively.",
+        "answer_kind": "text",
+    }
+    path = tmp_path / "general.jsonl"
+    path.write_text(json.dumps(case) + "\n", encoding="utf-8")
+    assert validate(path, parsed_dir) == []
+
+
+def test_general_case_catches_per_evidence_section_mismatch(tmp_path):
+    parsed_dir = tmp_path / "parsed"
+    parsed_dir.mkdir()
+    accessions = ["0002222222-25-000001", "0003333333-25-000001", "0004444444-25-000001"]
+    evidences = [
+        "Company A discloses a supply chain risk in its filing.",
+        "Company B discloses a cybersecurity risk in its filing.",
+        "Company C discloses a litigation risk in its filing.",
+    ]
+    for acc, cik, ev in zip(accessions, ["0002222222", "0003333333", "0004444444"], evidences):
+        _write_minimal_filing(parsed_dir, acc, cik, ev, page=2)
+
+    # Corrupt the second evidence string so it no longer matches its own section.
+    bad_evidences = list(evidences)
+    bad_evidences[1] = "This text was never written by Company B."
+
+    case = {
+        "id": "g_general_0002",
+        "question": "What risk does each company disclose?",
+        "type": "general",
+        "companies": "general",
+        "accession_nos": accessions,
+        "section_ids": [f"{acc}:1A:001" for acc in accessions],
+        "table_ids": [None, None, None],
+        "evidence": bad_evidences,
+        "page": [2, 2, 2],
+        "answer": "Supply chain, cybersecurity, and litigation risk respectively.",
+        "answer_kind": "text",
+    }
+    path = tmp_path / "general_bad.jsonl"
+    path.write_text(json.dumps(case) + "\n", encoding="utf-8")
+    problems = validate(path, parsed_dir)
+    assert len(problems) == 1
+    assert accessions[1] in problems[0].reason
+    assert "not an exact substring" in problems[0].reason
+
+
+def test_multi_part_case_with_per_index_section_ids_across_sections(tmp_path):
+    # Fixture filing has two sections: 1A:001 (page 2) and 7:001 (page 3).
+    case = {
+        "id": "g_mp_0001",
+        "question": "What does the filing say about customers, and about revenue?",
+        "type": "multi_part",
+        "companies": ["0001111111"],
+        "accession_no": "0001111111-25-000001",
+        "section_ids": ["0001111111-25-000001:1A:001", "0001111111-25-000001:7:001"],
+        "table_ids": [None, "t001"],
+        "evidence": [
+            "A small number of customers account for a large share of our revenue, and the loss of any one of them would materially harm our results.",
+            "Total revenue | 2025: 13,845 | 2024: 11,800",
+        ],
+        "page": [2, 3],
+        "answer": "Customer concentration risk, and total revenue of 13,845 thousand.",
+        "answer_kind": "text",
+    }
+    path = tmp_path / "multi_part_across_sections.jsonl"
+    path.write_text(json.dumps(case) + "\n", encoding="utf-8")
+    assert validate(path, FIXTURE_PARSED_DIR) == []
+
+
+def test_multi_part_parts_in_one_section_flag_matches_section_ids(tmp_path):
+    case = {
+        "id": "g_mp_0002",
+        "question": "What two things does the risk factors section say?",
+        "type": "multi_part",
+        "companies": ["0001111111"],
+        "accession_no": "0001111111-25-000001",
+        "section_ids": ["0001111111-25-000001:1A:001", "0001111111-25-000001:1A:001"],
+        "table_ids": [None, None],
+        "evidence": [
+            "A small number of customers account for a large share of our revenue, and the loss of any one of them would materially harm our results.",
+            "Our products depend on components sourced from a single overseas supplier, and any disruption to that supplier would delay shipments.",
+        ],
+        "page": [2, 2],
+        "answer": "Customer concentration risk and supplier concentration risk.",
+        "answer_kind": "text",
+        "parts_in_one_section": True,
+    }
+    path = tmp_path / "multi_part_one_section.jsonl"
+    path.write_text(json.dumps(case) + "\n", encoding="utf-8")
+    assert validate(path, FIXTURE_PARSED_DIR) == []
+
+
+def test_multi_part_parts_in_one_section_flag_rejects_mismatch(tmp_path):
+    case = {
+        "id": "g_mp_0003",
+        "question": "What does the filing say about customers, and about revenue?",
+        "type": "multi_part",
+        "companies": ["0001111111"],
+        "accession_no": "0001111111-25-000001",
+        "section_ids": ["0001111111-25-000001:1A:001", "0001111111-25-000001:7:001"],
+        "table_ids": [None, "t001"],
+        "evidence": [
+            "A small number of customers account for a large share of our revenue, and the loss of any one of them would materially harm our results.",
+            "Total revenue | 2025: 13,845 | 2024: 11,800",
+        ],
+        "page": [2, 3],
+        "answer": "Customer concentration risk, and total revenue of 13,845 thousand.",
+        "answer_kind": "text",
+        "parts_in_one_section": True,  # wrong: the two parts are in different sections
+    }
+    path = tmp_path / "multi_part_flag_mismatch.jsonl"
+    path.write_text(json.dumps(case) + "\n", encoding="utf-8")
+    problems = validate(path, FIXTURE_PARSED_DIR)
+    assert any("parts_in_one_section is true but section_ids differ" in p.reason for p in problems)
+
+
+def test_multi_part_without_section_ids_falls_back_to_shared_section_id():
+    # Old-style multi_part case (like the fixture's f0005): a single shared
+    # section_id/table_id/page applies to every evidence string. This must
+    # keep working unchanged.
+    cases = load_golden(FIXTURE_GOLDEN)
+    f0005 = next(c for c in cases if c.id == "f0005")
+    assert f0005.section_ids is None
+    assert f0005.section_id == "0001111111-25-000001:1A:001"
+    problems = validate(FIXTURE_GOLDEN, FIXTURE_PARSED_DIR)
+    assert not any(p.case_id == "f0005" for p in problems)
+
+
+# --------------------------------------------------------------------------
 # judge: JSON parsing with FakeJudge
 # --------------------------------------------------------------------------
 

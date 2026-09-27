@@ -48,6 +48,8 @@ class GoldenCase(BaseModel):
     item: str | None = None
     section_id: str | None = None
     table_id: str | None = None
+    section_ids: list[str | None] | None = None
+    table_ids: list[str | None] | None = None
     evidence: str | list[str] | None = None
     page: int | list[int] | None = None
     answer: str
@@ -55,6 +57,7 @@ class GoldenCase(BaseModel):
     answer_value: float | None = None
     answer_unit: str | None = None
     notes: str | None = None
+    parts_in_one_section: bool | None = None
 
 
 @dataclass
@@ -212,6 +215,8 @@ def validate(golden_path: str | Path, parsed_dir: str | Path) -> list[Problem]:
                 problems.append(Problem(case_id=case.id, reason="general case must have >= 3 evidence strings"))
             elif not case.accession_nos or len(case.accession_nos) != len(case.evidence):
                 problems.append(Problem(case_id=case.id, reason="general case needs accession_nos parallel to evidence"))
+            elif not case.section_ids or len(case.section_ids) != len(case.evidence):
+                problems.append(Problem(case_id=case.id, reason="general case needs section_ids parallel to evidence"))
             else:
                 distinct = set(case.accession_nos)
                 if len(distinct) < 3:
@@ -220,12 +225,16 @@ def validate(golden_path: str | Path, parsed_dir: str | Path) -> list[Problem]:
                 if isinstance(case.page, list) and len(pages) != len(case.evidence):
                     problems.append(Problem(case_id=case.id, reason="general case page list must be parallel to evidence"))
                     pages = [None] * len(case.evidence)
-                for ev, acc, pg in zip(case.evidence, case.accession_nos, pages):
+                table_ids = case.table_ids if case.table_ids is not None else [None] * len(case.evidence)
+                if case.table_ids is not None and len(table_ids) != len(case.evidence):
+                    problems.append(Problem(case_id=case.id, reason="general case table_ids list must be parallel to evidence"))
+                    table_ids = [None] * len(case.evidence)
+                for ev, acc, sec_id, tab_id, pg in zip(case.evidence, case.accession_nos, case.section_ids, table_ids, pages):
                     parsed = _load_parsed(parsed_dir, acc)
                     if parsed is None:
                         problems.append(Problem(case_id=case.id, reason=f"parsed file not found for {acc!r}"))
                         continue
-                    reason = _check_single_evidence(parsed, case.section_id, case.table_id, ev, pg)
+                    reason = _check_single_evidence(parsed, sec_id, tab_id, ev, pg)
                     if reason:
                         problems.append(Problem(case_id=case.id, reason=f"[{acc}] {reason}"))
             continue  # general cases have no single accession_no / companies CIK check
@@ -261,14 +270,54 @@ def validate(golden_path: str | Path, parsed_dir: str | Path) -> list[Problem]:
             if not isinstance(case.evidence, list) or not (2 <= len(case.evidence) <= 3):
                 problems.append(Problem(case_id=case.id, reason="multi_part case must have 2 to 3 evidence strings"))
                 continue
-            pages = case.page if isinstance(case.page, list) else [case.page] * len(case.evidence)
-            if len(pages) != len(case.evidence):
+            n = len(case.evidence)
+
+            # accession_nos is optional for multi_part: all parts default to the shared accession_no.
+            if case.accession_nos is not None:
+                if len(case.accession_nos) != n:
+                    problems.append(Problem(case_id=case.id, reason="multi_part accession_nos list must be parallel to evidence"))
+                    accession_list = [case.accession_no] * n
+                else:
+                    accession_list = case.accession_nos
+            else:
+                accession_list = [case.accession_no] * n
+
+            # section_ids/table_ids are optional: fall back to the shared singular field
+            # (this is the single-section multi_part shape; see parts_in_one_section below).
+            if case.section_ids is not None:
+                if len(case.section_ids) != n:
+                    problems.append(Problem(case_id=case.id, reason="multi_part section_ids list must be parallel to evidence"))
+                    section_list = [case.section_id] * n
+                else:
+                    section_list = case.section_ids
+            else:
+                section_list = [case.section_id] * n
+
+            if case.table_ids is not None:
+                if len(case.table_ids) != n:
+                    problems.append(Problem(case_id=case.id, reason="multi_part table_ids list must be parallel to evidence"))
+                    table_list = [case.table_id] * n
+                else:
+                    table_list = case.table_ids
+            else:
+                table_list = [case.table_id] * n
+
+            pages = case.page if isinstance(case.page, list) else [case.page] * n
+            if len(pages) != n:
                 problems.append(Problem(case_id=case.id, reason="multi_part page list must be parallel to evidence"))
-                pages = [case.page if not isinstance(case.page, list) else None] * len(case.evidence)
-            for ev, pg in zip(case.evidence, pages):
-                reason = _check_single_evidence(parsed, case.section_id, case.table_id, ev, pg)
+                pages = [case.page if not isinstance(case.page, list) else None] * n
+
+            if case.parts_in_one_section and len({s for s in section_list if s is not None}) > 1:
+                problems.append(Problem(case_id=case.id, reason="parts_in_one_section is true but section_ids differ"))
+
+            for ev, acc, sec_id, tab_id, pg in zip(case.evidence, accession_list, section_list, table_list, pages):
+                part_parsed = parsed if acc == case.accession_no else _load_parsed(parsed_dir, acc)
+                if part_parsed is None:
+                    problems.append(Problem(case_id=case.id, reason=f"parsed file not found for {acc!r}"))
+                    continue
+                reason = _check_single_evidence(part_parsed, sec_id, tab_id, ev, pg)
                 if reason:
-                    problems.append(Problem(case_id=case.id, reason=reason))
+                    problems.append(Problem(case_id=case.id, reason=f"[{acc}] {reason}" if acc != case.accession_no else reason))
             continue
 
         # Single-evidence types: fact_lookup, number_from_table, paraphrased, exact_term.
