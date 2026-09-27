@@ -43,3 +43,7 @@ Format: wave, question, default taken, effect of the default.
 ## Wave 8a (build)
 
 - **Wave 8a / router in the 300 lines.** The final system fits in exactly 300 lines only without the company router; a `--company` flag replaces it, and the full pipeline in `citation_rag/` keeps the router. Default: keep the 300-line file without the router until wave 7 reports the router's accuracy and its effect on answers. If the router matters, the final file grows to about 330 lines ("about 300" in the requirement). Effect: the final file is simpler; a user must name the company on the command line.
+
+## Wave 2e
+
+- **Wave 2e / stricter check.** An absent required Item now fails for every filer, including smaller reporting companies. About 10 filings that passed with a silently missing Item move to the failure list. Default: accept the smaller passing set. Effect: no indexed filing has a hidden gap; the passing set stays above 1,000.
