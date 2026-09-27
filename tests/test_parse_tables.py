@@ -459,8 +459,11 @@ def test_sample_filing_table_counts_and_xbrl_coverage(path):
     matched = result["xbrl_nonfraction_matched"]
     rate = matched / total if total else 1.0
 
-    assert 20 <= n_data <= 800, (
-        f"{os.path.basename(path)}: {n_data} data tables, expected 20-800"
+    # Wave 2d: widened from 20-800 to 5-900 (contract item 4), matching
+    # checks.py's own table_count_range (TABLE_COUNT_MIN/MAX), measured
+    # against the full corpus.
+    assert 5 <= n_data <= 900, (
+        f"{os.path.basename(path)}: {n_data} data tables, expected 5-900"
     )
 
     if rate < 0.85:

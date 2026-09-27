@@ -52,7 +52,12 @@ COVERAGE_CEILING = 1.15  # generous: table.text repeats header labels per
 XBRL_IN_TABLE_FLOOR = 0.98
 TABLE_COUNT_MIN = 5
 TABLE_COUNT_MAX = 900
-NO_EMPTY_SECTION_MIN = 50
+# Wave 2d: lowered from 50 to 20 (contract item 2). 31 wave 2c failures were
+# a complete, correctly-parsed one-sentence Item body under the old 50-char
+# floor ("We are not a party to any material lawsuits." is 46 characters) --
+# a genuine, terse answer, not an empty section. 20 characters still catches
+# a truly empty placeholder-only section.
+NO_EMPTY_SECTION_MIN = 20
 
 
 def _is_10q_structure(items) -> bool:

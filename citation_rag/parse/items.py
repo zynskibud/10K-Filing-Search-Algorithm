@@ -76,6 +76,21 @@ SMALLER_REPORTING_OMITTABLE = {"1A", "1B", "6", "7A"}
 _SEP = r"[.,:\-–—]"
 _PART_PREFIX = rf"(?:PART\s+[IV]+\s*{_SEP}?\s*)?"
 
+# Wave 2d: "[IL]TEM" (not just "ITEM") tolerates a leading-letter typo some
+# filers' own source HTML actually contains -- a lowercase "l" in place of
+# capital "I" (1-800-Flowers' real filing literally spells the word "ltem
+# 1A." at its Item 1A heading). re.I already folds I/i; "L" does not fold
+# to "I", so it must be listed explicitly. This is a real, if rare, typo
+# class (an "I"/"l" mix-up), not a per-filer special case -- any filer
+# that makes this exact typo is covered.
+_ITEM_WORD = r"[IL]TEMS?"
+# Wave 2d: the item-number group also accepts "I" (or "i") as a stand-in
+# for the digit "1" specifically before a lettered sub-item -- NewLake
+# Capital's real filing heads its Item 1A "ITEM IA. RISK FACTORS" (capital
+# "I" typo'd for "1"). Restricted to the "1[A-C]" shape only, so it can
+# never widen a two-digit Item number like "10" or "11".
+_NUM_RE = rf"(?:\d{{1,2}}[A-C]?|I[A-C])"
+
 # (?!\.\d) rejects an EDGAR Form 8-K style decimal sub-item reference
 # such as "Item 5.02." (a cross-reference inside a 10-K's own text), which
 # would otherwise look like a heading for Item 5.
@@ -86,11 +101,11 @@ ITEM_RE = re.compile(
     # heading -- COMBINED_RE is always tried before falling back to this
     # pattern). Found via Organon & Co.'s real filing, where "Items 15."
     # otherwise matched neither regex and Item 15 was never detected.
-    rf"^\s*{_PART_PREFIX}ITEMS?\s+(\d{{1,2}}[A-C]?)(?!\.\d)\s*{_SEP}?\s*(.*)$", re.I
+    rf"^\s*{_PART_PREFIX}{_ITEM_WORD}\s+({_NUM_RE})(?!\.\d)\s*{_SEP}?\s*(.*)$", re.I
 )
 COMBINED_RE = re.compile(
-    rf"^\s*{_PART_PREFIX}ITEMS?\s+(\d{{1,2}}[A-C]?)(?!\.\d)\.?\s+(?:AND|&)\s+"
-    rf"(\d{{1,2}}[A-C]?)(?!\.\d)\.?\s*(.*)$",
+    rf"^\s*{_PART_PREFIX}{_ITEM_WORD}\s+({_NUM_RE})(?!\.\d)\.?\s+(?:AND|&)\s+"
+    rf"({_NUM_RE})(?!\.\d)\.?\s*(.*)$",
     re.I,
 )
 # The contract's phrase list is "not required", "not applicable", "none",
@@ -156,7 +171,13 @@ def _is_cross_reference_quote(trailing: str | None) -> bool:
 
 
 def normalize_item_num(raw: str) -> str:
-    return raw.upper().replace(" ", "")
+    num = raw.upper().replace(" ", "")
+    # A leading "I" typo'd for the digit "1" (see _NUM_RE above) still
+    # needs to resolve to the real Item number ("IA" -> "1A") so it looks
+    # up correctly everywhere else (ITEM_TITLES, ITEM_PARTS, STANDARD_ITEMS).
+    if num[:1] == "I" and len(num) > 1 and num[1] in "ABC":
+        num = "1" + num[1:]
+    return num
 
 
 def clean_title(text: str) -> str:
@@ -396,6 +417,120 @@ def _classify_status(raw_text: str) -> str | None:
     if len(stripped) < 1000 and NOT_REQUIRED_RE.search(stripped):
         return "not_required"
     return None
+
+
+# ---------------------------------------------------------------------------
+# Wave 2d: cross-checking a not_required classification against the raw
+# document text, for the four Items a smaller reporting company may omit.
+#
+# The old rule ("smaller reporting company and no heading found means
+# not_required") masked a real heading-detection miss: the orchestrator's
+# spot check against sec.gov found 9 passing filings with Item 1A
+# not_required that had real risk factors. The contract's fix: mark
+# not_required only when (a) a heading exists and its body matches the
+# omitted-item phrases, or (b) no heading exists AND the raw document text
+# has no run longer than 2,000 characters between a mention of that Item
+# and the next Item mention -- otherwise a missing heading is `absent`.
+#
+# Two separate mechanisms below implement this, deliberately kept narrow
+# after an early, broader draft (checking the raw-text gap in both
+# directions around every mention, regardless of whether a heading was
+# found) turned out to be unsafe at corpus scale: Item 1A's own real body
+# is almost always tens of thousands of characters, so *any* filing where
+# Item 1B is legitimately not_required ("None.") would see a huge "gap"
+# back to Item 1A's own heading and get flagged as suspicious -- that gap
+# is Item 1A's own already-correctly-captured content, not missing Item 1B
+# content, and the broad check could not tell the two apart. It turned a
+# ~89% corpus pass rate into single digits in a live run and was reverted.
+# ---------------------------------------------------------------------------
+
+_OMITTABLE_NEXT = {"1A": "1B", "1B": "1C", "6": "7", "7A": "8"}
+_LONG_RUN_LIMIT = 2000
+
+
+def _mention_number_pattern(item_num: str) -> str:
+    """Same "1"/"I" typo tolerance as _NUM_RE (see ITEM_RE), for scanning
+    a bare mention rather than an anchored heading match."""
+    if item_num[:1] == "1" and len(item_num) > 1:
+        return f"[1I]{re.escape(item_num[1:])}"
+    return re.escape(item_num)
+
+
+def _mention_positions(item_num: str, full_text: str) -> list[int]:
+    """Every place `item_num` is literally mentioned anywhere in the raw
+    document text -- not just at a detected heading, so a cross-reference
+    ("... under Item 1A, 'Risk Factors'") still counts as a mention."""
+    pat = re.compile(rf"\b[IL]TEMS?\s+{_mention_number_pattern(item_num)}\b", re.I)
+    return [m.start() for m in pat.finditer(full_text)]
+
+
+def _has_forward_long_run(item_num: str, full_text: str) -> bool:
+    """Rule (b), literally: no heading was found for `item_num` at all, so
+    the only "mentions" of it left in the document are a TOC entry and any
+    cross-reference. If one of those is followed by more than 2,000
+    characters before the *next* Item is itself mentioned (or by
+    end-of-document), a real heading was very likely missed (Spruce Power
+    Holding Corp's real filing: a forward-looking-statements cross-
+    reference -- "... described above and in Item 1A under the heading
+    'Risk Factors'" -- sits deep inside Item 1's own body, more than 2,000
+    characters before Item 1B is ever mentioned, because Item 1A's real
+    heading itself is missing the word "Item" entirely in the source
+    HTML). Only usable when a neighboring Item is mentioned somewhere in
+    the document at all -- with no mention of it anywhere, there is no
+    boundary to measure against, and defaulting to end-of-document would
+    flag most Items in most short documents.
+    """
+    next_num = _OMITTABLE_NEXT[item_num]
+    this_positions = _mention_positions(item_num, full_text)
+    if not this_positions:
+        return False
+    next_positions = sorted(_mention_positions(next_num, full_text))
+    if not next_positions:
+        return False
+    for pos in this_positions:
+        fwd_candidates = [p for p in next_positions if p > pos]
+        fwd_end = min(fwd_candidates) if fwd_candidates else len(full_text)
+        if fwd_end - pos > _LONG_RUN_LIMIT:
+            return True
+    return False
+
+
+def _candidate_body_lengths(kept_before_dedup, content_blocks) -> dict:
+    """Map id(heading) -> length of the text between it and the next
+    heading in document order (any Item number), mirroring
+    `_following_text_len` but keyed by heading identity so a later lookup
+    can ask "how much real content followed *this specific* occurrence."
+    """
+    ordered = sorted(kept_before_dedup, key=lambda h: h["content_index"])
+    lens = {}
+    for i, h in enumerate(ordered):
+        start = h["content_index"]
+        end = ordered[i + 1]["content_index"] if i + 1 < len(ordered) else len(content_blocks)
+        lens[id(h)] = sum(_block_text_len(b) for b in content_blocks[start:end])
+    return lens
+
+
+def _has_larger_duplicate_elsewhere(item_num, winner, candidates_by_item, candidate_lens) -> bool:
+    """True if some *other* raw heading candidate for the same Item number
+    (one `_resolve_heading_candidates` did not pick) has substantially more
+    following text than the 2,000-character not_required threshold.
+
+    Targets BTCS Inc.'s real filing: a genuine, full "ITEM 1A. RISK
+    FACTORS" section (with real content) exists later in the document, but
+    `_resolve_heading_candidates`'s ceiling rule -- which exists to stop an
+    embedded exhibit's own, unrelated Item numbering from hijacking a
+    well-formed heading -- correctly keeps the earlier, short "Not
+    applicable ... described under Item 7" stub as Item 1A's own range,
+    since the later occurrence sits physically inside what became Item 7's
+    range. Rather than reopen that ceiling rule (risking exactly the
+    hijack it was written to prevent), this only asks whether the loser
+    heading itself looks real (substantial content followed it) -- if so,
+    the winner's own short "not required" reading should not be trusted
+    over it, even though nothing here changes which occurrence still wins
+    the position.
+    """
+    others = [h for h in candidates_by_item.get(item_num, []) if winner is None or id(h) != id(winner)]
+    return any(candidate_lens.get(id(h), 0) > _LONG_RUN_LIMIT for h in others)
 
 
 # ---------------------------------------------------------------------------
@@ -780,10 +915,25 @@ def _filter_spurious_headings(kept: list[dict]) -> list[dict]:
 def detect_items(root, page_for, pages: list[dict], filer_category: str | None):
     content_blocks, headings = build_streams(root, page_for)
     kept, n_toc_skipped, first_real = filter_headings(headings, content_blocks)
+    kept_before_dedup = kept
     kept = _filter_spurious_headings(kept)
 
     categories = split_filer_category(filer_category)
     smaller_reporting = is_smaller_reporting(categories)
+    # Whole-document text for the wave 2d not_required cross-check (see
+    # _has_forward_long_run); computed once, independent of the
+    # content_blocks/heading split, since it needs to see mentions
+    # (headings and cross-references alike) everywhere.
+    full_text = norm_text(root)
+    candidates_by_item: dict[str, list[dict]] = {}
+    for h in kept_before_dedup:
+        if h["combined"]:
+            continue
+        candidates_by_item.setdefault(normalize_item_num(h["match"].group(1)), []).append(h)
+    candidate_lens = _candidate_body_lengths(kept_before_dedup, content_blocks)
+    winner_by_item: dict[str, dict] = {
+        normalize_item_num(h["match"].group(1)): h for h in kept if not h["combined"]
+    }
 
     stats = {
         "combined_items": 0,
@@ -868,7 +1018,16 @@ def detect_items(root, page_for, pages: list[dict], filer_category: str | None):
         if extra:
             raw_text += "\n" + _raw_text_for_range(content_blocks, extra[0], extra[1])
         override = _classify_status(raw_text)
-        if override:
+        if override == "not_required" and item_num in SMALLER_REPORTING_OMITTABLE:
+            # Wave 2d: a heading exists and its own body reads like a
+            # not_required disclaimer, but don't trust that in isolation
+            # when another raw candidate for this exact Item number has
+            # substantial content of its own (see
+            # _has_larger_duplicate_elsewhere's docstring -- BTCS Inc.'s
+            # real filing).
+            if not _has_larger_duplicate_elsewhere(item_num, winner_by_item.get(item_num), candidates_by_item, candidate_lens):
+                rec["status"] = override
+        elif override:
             rec["status"] = override
 
     # Integrated-report fallback: no body headings survived at all, but a
@@ -900,7 +1059,14 @@ def detect_items(root, page_for, pages: list[dict], filer_category: str | None):
         else:
             status = "absent"
             if smaller_reporting and item_num in SMALLER_REPORTING_OMITTABLE:
-                status = "not_required"
+                # Wave 2d: no heading at all was found for this Item --
+                # mark it not_required only when the raw document text
+                # backs that up (rule (b) of the contract); otherwise a
+                # heading was very likely missed, so it is left `absent`
+                # and goes to required_items_present's failure list
+                # instead of being silently swallowed.
+                if not _has_forward_long_run(item_num, full_text):
+                    status = "not_required"
             items.append(
                 {
                     "item": item_num,
