@@ -191,3 +191,15 @@ scripts/parse.sh --force
 - `scripts/parse.sh --force` over 1,333 filings, 4 workers, 322 seconds.
 - 1,194 pass, 139 fail (wave 2d: 1,202 pass, 131 fail). Net -8, as estimated: 10 silent gaps became visible failures, 2 filings were rescued.
 - Spruce Power: Item 1A `present`, 32 sections, passes. BancFirst: Item 1A `present`, 32 sections, passes.
+
+## Orchestrator spot check against sec.gov (cumulative, 5 filings)
+
+| Filing | Item 1A start page (parsed / sec.gov) | First risk heading | Item 7 start page |
+|---|---|---|---|
+| Energy Transfer | 47 / 47 | (first section untitled) | 104 / 104 |
+| CytomX | 34 (label none) / 32 | matches | 79 / TOC 78 |
+| Spruce Power (after 2e) | present, 32 sections | matches | 36 |
+| HNI Corp | 11 / 11 | exact match, second heading also exact | 26 / 26 |
+| Franklin Covey | 13 / 13 | exact match; the second parsed heading differs from the second heading sec.gov's reader reported (order or a summary block) | 27 / 27 |
+
+Two notes: (1) the first section of an Item often has no title (the text between the Item heading and the first sub-heading); the chunker handles it, but the citation card will show the Item title instead. (2) CytomX's Item 1A page has no printed label detected; the page index is right, the label is missing. Both are cosmetic for citations and recorded here for later polish.
