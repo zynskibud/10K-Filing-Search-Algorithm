@@ -107,8 +107,8 @@ Rules:
 - `evidence` is copied exactly from the parsed JSON: from a section `text` (a contiguous substring of 40 to 400 characters), or from a table `text` (one or more whole lines). The validator checks this by exact substring match.
 - `page` is the `pages[].index` (position), not the printed label. The validator checks that the evidence lies inside a section or table whose page range contains it.
 - For `unanswerable`: `evidence` is null, `answer` is "The filing does not state this.", `answer_kind` is `none`, and `notes` says what nearby content exists (so the question is plausible, not random).
-- For `multi_part`: `evidence` may be a list of 2 to 3 strings, each validated. `answer` covers all parts.
-- For `general`: `companies` is `"general"`, and `evidence` is a list of strings from at least 3 different filings, each with its own `accession_no` in a parallel list `accession_nos`.
+- For `multi_part`: `evidence` is a list of 2 to 3 strings, each validated against its own location: `section_ids` (and `table_ids`, null where not a table) are lists parallel to `evidence`, and `page` is a parallel list of ints. `answer` covers all parts.
+- For `general`: `companies` is `"general"`, and `evidence` is a list of strings from at least 3 different filings, with parallel lists `accession_nos`, `section_ids`, `table_ids` (null where not a table), and `page`.
 - `answer_kind` is `number`, `text`, or `none`. When `number`, `answer_value` is the numeric value, and `answer_unit` (optional) gives the unit.
 
 ## 3. Results log: `evals/results/runs.jsonl`
