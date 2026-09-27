@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import argparse
 import random
+import os
 import sys
 import time
 from pathlib import Path
@@ -139,10 +140,33 @@ def chunk_all(
     from citation_rag.chunk import run as chunk_run
 
     out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
     written: dict[str, Path] = {}
     for model, strategy in INDEX_CONFIGS:
         name = f"{model}__{strategy}"
         out_path = out_dir / f"{name}.jsonl"
+        # Reuse: a full-corpus chunk file that already exists is not rebuilt
+        # (a --subset run always rebuilds, because its content differs).
+        if filings is None and out_path.exists() and out_path.stat().st_size > 0:
+            print(f"[chunk] {name}: reusing {out_path}", file=sys.stderr, flush=True)
+            written[name] = out_path
+            continue
+        # Strategies s1 to s3 do not depend on the embedding model (the
+        # token ruler is always bge-small), so the two models' files are
+        # byte-identical: link the twin instead of chunking again.
+        twin = None
+        for other_model in ("bge_small", "bge_m3"):
+            if other_model != model and strategy in ("s1", "s2", "s3"):
+                cand = out_dir / f"{other_model}__{strategy}.jsonl"
+                if cand.exists() and cand.stat().st_size > 0 and cand in written.values():
+                    twin = cand
+        if twin is not None:
+            if out_path.exists():
+                out_path.unlink()
+            os.link(twin, out_path)
+            print(f"[chunk] {name}: linked to {twin.name}", file=sys.stderr, flush=True)
+            written[name] = out_path
+            continue
         chunk_run.run(strategy, table_option, str(out_path), str(parsed_dir), filings)
         written[name] = out_path
     return written
