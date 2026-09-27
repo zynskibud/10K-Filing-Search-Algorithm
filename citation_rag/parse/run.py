@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import multiprocessing as mp
+import os
 import sys
 import time
 import traceback
@@ -191,6 +192,7 @@ def write_failures(results: list[dict], failures_path: str) -> int:
 
 
 def main(argv=None):
+    os.nice(10)  # protocol: host parse workers run at low priority
     parser = argparse.ArgumentParser(description="Parse the full 10-K corpus into data/parsed/.")
     parser.add_argument("--manifest", required=True, help="Path to the manifest JSONL (data/raw/corpus.jsonl)")
     parser.add_argument("--out", required=True, help="Output directory (data/parsed)")
