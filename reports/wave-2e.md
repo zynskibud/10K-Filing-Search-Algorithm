@@ -185,3 +185,9 @@ scripts/parse.sh --force
   (32 sections, `checks.passed: True`).
 - `reports/wave-2e.md` has the impact estimate: **yes**, above (51
   absent-required-Item filings; 2 rescued by the new heading rule).
+
+## Re-parse result (orchestrator)
+
+- `scripts/parse.sh --force` over 1,333 filings, 4 workers, 322 seconds.
+- 1,194 pass, 139 fail (wave 2d: 1,202 pass, 131 fail). Net -8, as estimated: 10 silent gaps became visible failures, 2 filings were rescued.
+- Spruce Power: Item 1A `present`, 32 sections, passes. BancFirst: Item 1A `present`, 32 sections, passes.
