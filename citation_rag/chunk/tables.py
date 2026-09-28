@@ -105,6 +105,30 @@ def _split_rows(header_line: str, row_lines: list[str], rows: list[dict], limit:
     cur_lines: list[str] = []
     cur_rows: list[dict] = []
     cur_tokens = header_tokens
+    # A single row wider than the limit (some filers print one row per
+    # dozens of columns) is split at its cell separators into several
+    # lines that each start with the row label, so no chunk exceeds the
+    # limit and every piece still says which row it belongs to.
+    expanded: list[tuple[str, dict]] = []
+    for line, row in zip(row_lines, rows):
+        if header_tokens + count_tokens(line) <= limit:
+            expanded.append((line, row))
+            continue
+        cells = line.split(" | ")
+        label = cells[0]
+        budget = max(50, limit - header_tokens)
+        piece: list[str] = [label]
+        piece_tokens = count_tokens(label)
+        for cell in cells[1:]:
+            ct = count_tokens(cell) + 1
+            if piece_tokens + ct > budget and len(piece) > 1:
+                expanded.append((" | ".join(piece), row))
+                piece, piece_tokens = [label], count_tokens(label)
+            piece.append(cell)
+            piece_tokens += ct
+        if len(piece) > 1 or not expanded or expanded[-1][1] is not row:
+            expanded.append((" | ".join(piece), row))
+    row_lines, rows = [e[0] for e in expanded], [e[1] for e in expanded]
     for line, row in zip(row_lines, rows):
         line_tokens = count_tokens(line)
         prospective = cur_tokens + line_tokens

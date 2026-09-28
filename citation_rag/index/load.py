@@ -126,7 +126,7 @@ def load_filings(parsed_dir: str | Path, conn: psycopg.Connection) -> None:
                     accession_no,
                     table["section_id"],
                     table["item"],
-                    table["title"],
+                    table.get("title") or "",
                     table.get("units"),
                     json.dumps(table.get("headers", [])),
                     json.dumps(table.get("rows", [])),

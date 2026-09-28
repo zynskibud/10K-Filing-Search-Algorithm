@@ -70,7 +70,7 @@ def init_database(conn: psycopg.Connection) -> None:
                 accession_no TEXT NOT NULL REFERENCES filings(accession_no) ON DELETE CASCADE,
                 section_id TEXT NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
                 item TEXT NOT NULL,
-                title TEXT NOT NULL,
+                title TEXT,
                 units TEXT,
                 headers JSONB NOT NULL,
                 rows JSONB NOT NULL,
