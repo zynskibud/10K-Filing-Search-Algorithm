@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import argparse
 import random
+import json
 import os
 import sys
 import time
@@ -99,17 +100,45 @@ def index_names() -> list[str]:
 # --------------------------------------------------------------------------
 
 
-def select_subset(parsed_dir: "str | Path", n: int, seed: int = SUBSET_SEED) -> list[str]:
-    """Accession numbers of a deterministic random N-filing subset of
-    `parsed_dir` (every `*.json` there, regardless of `checks.passed` --
-    the chunker itself skips failing filings), sorted for a stable file."""
-    paths = sorted(Path(parsed_dir).glob("*.json"))
-    accession_nos = [p.stem for p in paths]
+def select_subset(
+    parsed_dir: "str | Path", n: int, seed: int = SUBSET_SEED, must_include: Sequence[str] = ()
+) -> list[str]:
+    """Accession numbers of a deterministic N-filing subset of the PASSING
+    filings in `parsed_dir`. `must_include` (the filings the golden set points
+    to) come first, so every eval question stays answerable; the rest is a
+    seeded random fill. Sorted for a stable file."""
+    passing: list[str] = []
+    for path in sorted(Path(parsed_dir).glob("*.json")):
+        try:
+            doc = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if doc.get("checks", {}).get("passed"):
+            passing.append(path.stem)
+    keep = [acc for acc in dict.fromkeys(must_include) if acc in set(passing)]
+    rest = [acc for acc in passing if acc not in set(keep)]
     rng = random.Random(seed)
-    n = min(n, len(accession_nos))
-    chosen = rng.sample(accession_nos, n)
-    chosen.sort()
+    fill = rng.sample(rest, max(0, min(n - len(keep), len(rest))))
+    chosen = sorted(keep + fill)
     return chosen
+
+
+def golden_accessions(golden_dir: "str | Path" = PROJECT_ROOT / "evals" / "golden") -> list[str]:
+    """Every accession number the dev and test golden sets point to."""
+    out: list[str] = []
+    for name in ("dev.jsonl", "test.jsonl"):
+        path = Path(golden_dir) / name
+        if not path.exists():
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            case = json.loads(line)
+            if case.get("accession_no"):
+                out.append(case["accession_no"])
+            for acc in case.get("accession_nos") or []:
+                out.append(acc)
+    return list(dict.fromkeys(out))
 
 
 def write_subset_list(accession_nos: Sequence[str], out_path: "str | Path" = DEFAULT_SUBSET_PATH) -> Path:
@@ -130,6 +159,7 @@ def chunk_all(
     out_dir: "str | Path",
     filings: "list[str] | None" = None,
     table_option: int = DEFAULT_TABLE_OPTION,
+    configs: Sequence[tuple[str, str]] = INDEX_CONFIGS,
 ) -> dict[str, Path]:
     """Chunk every (model, strategy) config, writing `{out_dir}/{index}.jsonl`.
 
@@ -142,7 +172,7 @@ def chunk_all(
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     written: dict[str, Path] = {}
-    for model, strategy in INDEX_CONFIGS:
+    for model, strategy in configs:
         name = f"{model}__{strategy}"
         out_path = out_dir / f"{name}.jsonl"
         # Reuse: a full-corpus chunk file that already exists is not rebuilt
@@ -213,6 +243,7 @@ def run_eta(
     chunk_paths: dict[str, Path],
     device: str,
     sample_fraction: float = DEFAULT_SAMPLE_FRACTION,
+    configs: Sequence[tuple[str, str]] = INDEX_CONFIGS,
 ) -> dict[str, dict]:
     """Sample-embed `sample_fraction` of each index (no DB, no disk output
     -- `citation_rag.index.embed`'s own `--sample` path) and return
@@ -222,8 +253,10 @@ def run_eta(
 
     results: dict[str, dict] = {}
     embedders: dict[str, object] = {}
-    for model_name, strategy in INDEX_CONFIGS:
+    for model_name, strategy in configs:
         name = f"{model_name}__{strategy}"
+        if name not in chunk_paths:
+            continue
         subset, n_chunks, full_tokens = embed_mod.sample_rows(chunk_paths[name], sample_fraction)
         if not subset:
             results[name] = {"tokens_per_second": 0.0, "eta_hours": 0.0, "n_chunks": 0}
@@ -279,15 +312,20 @@ def eta_gate(results: dict[str, dict], max_hours: float, subset_given: bool) -> 
 # --------------------------------------------------------------------------
 
 
-def run_full(chunk_paths: dict[str, Path], device: str) -> None:
+def run_full(chunk_paths: dict[str, Path], device: str, vectors_dir: "str | Path | None" = None) -> None:
     """Embed every chunk of every index (bge_small indexes first), writing
     resumable shards and attaching vectors (which also builds that index's
     HNSW index -- see `citation_rag.index.load.attach_vectors`)."""
     from citation_rag.index import embed as embed_mod
 
     for model_name, strategy in INDEX_CONFIGS:
+        if f"{model_name}__{strategy}" not in chunk_paths:
+            continue
         name = f"{model_name}__{strategy}"
-        embed_mod.embed_file(name, chunk_paths[name], device=device)
+        embed_mod.embed_file(
+            name, chunk_paths[name], device=device,
+            out_dir=(Path(vectors_dir) / name) if vectors_dir else None,
+        )
 
 
 def build_bm25_all(names: "list[str] | None" = None) -> None:
@@ -327,23 +365,38 @@ def parse_args(argv: "Sequence[str] | None" = None) -> argparse.Namespace:
         metavar="N",
         help="Restrict to N random filings (seed 20260925); also bypasses the --max-hours gate.",
     )
+    parser.add_argument("--include-golden", action="store_true",
+                        help="With --subset: include every filing the dev and test golden sets point to, then fill at random.")
+    parser.add_argument("--indexes", default=None,
+                        help="Comma-separated index names to build (default: all 7).")
+    parser.add_argument("--vectors-dir", default=None, help="Where vector shards go (default data/vectors).")
     return parser.parse_args(argv)
 
 
 def main(argv: "Sequence[str] | None" = None) -> int:
     args = parse_args(argv)
 
+    configs = INDEX_CONFIGS
+    if args.indexes:
+        wanted = {x.strip() for x in args.indexes.split(",") if x.strip()}
+        configs = [(m, st) for m, st in INDEX_CONFIGS if f"{m}__{st}" in wanted]
+        missing = wanted - {f"{m}__{st}" for m, st in configs}
+        if missing:
+            print(f"unknown index names: {sorted(missing)}", file=sys.stderr)
+            return 2
+
     filings = None
     if args.subset is not None:
-        chosen = select_subset(args.parsed_dir, args.subset)
+        must = golden_accessions() if args.include_golden else []
+        chosen = select_subset(args.parsed_dir, args.subset, must_include=must)
         subset_path = write_subset_list(chosen)
         filings = [str(Path(args.parsed_dir) / f"{acc}.json") for acc in chosen]
-        print(f"subset: {len(chosen)} filings (seed={SUBSET_SEED}), written to {subset_path}")
+        print(f"subset: {len(chosen)} filings ({len(must)} golden-referenced, seed={SUBSET_SEED}), written to {subset_path}")
 
-    chunk_paths = chunk_all(args.parsed_dir, args.chunks_dir, filings=filings, table_option=args.table_option)
+    chunk_paths = chunk_all(args.parsed_dir, args.chunks_dir, filings=filings, table_option=args.table_option, configs=configs)
 
     if args.eta_only:
-        results = run_eta(chunk_paths, device=args.device)
+        results = run_eta(chunk_paths, device=args.device, configs=configs)
         eta_path = write_eta_report(results, device=args.device)
         for name, r in results.items():
             print(
@@ -362,7 +415,7 @@ def main(argv: "Sequence[str] | None" = None) -> int:
 
     # --full
     load_all(args.parsed_dir, chunk_paths)
-    run_full(chunk_paths, device=args.device)
+    run_full(chunk_paths, device=args.device, vectors_dir=args.vectors_dir)
     build_bm25_all(list(chunk_paths.keys()))
     print(f"full build complete for {len(chunk_paths)} indexes")
     return 0

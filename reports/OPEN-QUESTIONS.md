@@ -47,3 +47,8 @@ Format: wave, question, default taken, effect of the default.
 ## Wave 2e
 
 - **Wave 2e / stricter check.** An absent required Item now fails for every filer, including smaller reporting companies. About 10 filings that passed with a silently missing Item move to the failure list. Default: accept the smaller passing set. Effect: no indexed filing has a hidden gap; the passing set stays above 1,000.
+
+## Wave 4 (execution)
+
+- **Wave 4 / subset size and arms.** Measured ETAs: bge-small 1.6 to 3.1 h per index, bge-m3 25 to 61 h per index on the full corpus. The recorded default (300-filing subset) would still cost about 37 GPU hours. Default taken: a 150-filing subset that includes all 47 golden-referenced filings, and 6 indexes instead of 7 (bge_m3__s2 dropped). Estimated 16 GPU hours. Effect: the chunking and embedding comparison is fair (same subset for every index) but rests on 150 filings, so its confidence intervals are wider; the winner is then built on the full corpus.
+- **Wave 4 / bge-m3 as the final model.** If bge-m3 wins, the full-corpus build costs 25 to 33 hours of GPU. Default: accept that cost only if bge-m3 beats bge-small by more than its confidence interval on the subset; otherwise the final system uses bge-small. Effect: a small bge-m3 gain does not buy a day of GPU time.
