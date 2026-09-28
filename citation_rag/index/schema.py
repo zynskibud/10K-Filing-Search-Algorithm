@@ -13,6 +13,27 @@ from __future__ import annotations
 import psycopg
 
 
+RELAX_NOT_NULL = {
+    "filings": ["ticker", "filer_category", "sic", "page_count", "fiscal_year", "filed_date", "company"],
+    "sections": ["title", "part", "page_start", "page_end", "token_count"],
+    "tables_parsed": ["title", "units", "headers", "rows", "page_start", "page_end", "item"],
+}
+
+
+def _relax_not_null(conn) -> None:
+    """Idempotent: drop NOT NULL on descriptive columns of tables that already
+    exist, so a database created with the stricter first DDL matches the
+    current one. Real filings have null tickers, titles, and page numbers."""
+    with conn.cursor() as cur:
+        for table, cols in RELAX_NOT_NULL.items():
+            cur.execute("SELECT to_regclass(%s)", (table,))
+            if cur.fetchone()[0] is None:
+                continue
+            for col in cols:
+                cur.execute(f"ALTER TABLE {table} ALTER COLUMN {col} DROP NOT NULL")
+    conn.commit()
+
+
 def init_database(conn: psycopg.Connection) -> None:
     """Create all schema tables and indexes.
 
@@ -32,14 +53,14 @@ def init_database(conn: psycopg.Connection) -> None:
             CREATE TABLE IF NOT EXISTS filings (
                 accession_no TEXT PRIMARY KEY,
                 cik TEXT NOT NULL,
-                company TEXT NOT NULL,
-                ticker TEXT NOT NULL,
-                fiscal_year INT NOT NULL,
-                filed_date TEXT NOT NULL,
-                filer_category TEXT NOT NULL,
-                sic TEXT NOT NULL,
+                company TEXT,
+                ticker TEXT,
+                fiscal_year INT,
+                filed_date TEXT,
+                filer_category TEXT,
+                sic TEXT,
                 source_url TEXT NOT NULL,
-                page_count INT NOT NULL
+                page_count INT
             )
         """)
 
@@ -48,14 +69,14 @@ def init_database(conn: psycopg.Connection) -> None:
             CREATE TABLE IF NOT EXISTS sections (
                 id TEXT PRIMARY KEY,
                 accession_no TEXT NOT NULL REFERENCES filings(accession_no) ON DELETE CASCADE,
-                item TEXT NOT NULL,
-                part TEXT NOT NULL,
+                item TEXT,
+                part TEXT,
                 seq INT NOT NULL,
-                title TEXT NOT NULL,
-                page_start INT NOT NULL,
-                page_end INT NOT NULL,
+                title TEXT,
+                page_start INT,
+                page_end INT,
                 text TEXT NOT NULL,
-                token_count INT NOT NULL
+                token_count INT
             )
         """)
 
@@ -69,14 +90,14 @@ def init_database(conn: psycopg.Connection) -> None:
                 id TEXT PRIMARY KEY,
                 accession_no TEXT NOT NULL REFERENCES filings(accession_no) ON DELETE CASCADE,
                 section_id TEXT NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
-                item TEXT NOT NULL,
+                item TEXT,
                 title TEXT,
                 units TEXT,
-                headers JSONB NOT NULL,
-                rows JSONB NOT NULL,
+                headers JSONB,
+                rows JSONB,
                 text TEXT NOT NULL,
-                page_start INT NOT NULL,
-                page_end INT NOT NULL
+                page_start INT,
+                page_end INT
             )
         """)
 
@@ -106,7 +127,7 @@ def init_database(conn: psycopg.Connection) -> None:
         """)
 
     conn.commit()
-
+    _relax_not_null(conn)
 
 def create_chunk_table(
     conn: psycopg.Connection,
@@ -135,18 +156,18 @@ def create_chunk_table(
                 chunk_key TEXT,
                 accession_no TEXT NOT NULL,
                 cik TEXT NOT NULL,
-                item TEXT NOT NULL,
+                item TEXT,
                 section_id TEXT,
                 table_id TEXT,
                 seq INT NOT NULL,
-                page_start INT NOT NULL,
-                page_end INT NOT NULL,
+                page_start INT,
+                page_end INT,
                 page_label TEXT,
                 is_table BOOL NOT NULL,
                 text TEXT NOT NULL,
                 embed_text TEXT NOT NULL,
                 embedding vector({embedding_dim}),
-                token_count INT NOT NULL
+                token_count INT
             )
         """)
 

@@ -26,7 +26,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from .prefix import make_embed_text, make_prefix
-from .tokens import count_tokens
+from .tokens import count_tokens, token_offsets
 
 TABLE_PLACEHOLDER_RE = re.compile(r"[ \t]*\[Table: (t\d+)\][ \t]*\n?")
 
@@ -91,6 +91,19 @@ def resolve_section_prose(section: dict, tables_by_id: dict, table_option: int) 
 # ---------------------------------------------------------------------------
 # Standalone table chunks (options 2 and 3)
 # ---------------------------------------------------------------------------
+
+
+def _cap_tokens(text: str, limit: int) -> str:
+    """Cut `text` to at most `limit` tokens (exact substring, via offsets).
+    Some exhibit-index tables carry a malformed header of 1,000+ tokens; a
+    header longer than half the chunk limit is cut so the row split can work."""
+    if count_tokens(text) <= limit:
+        return text
+    offsets = token_offsets(text)
+    if len(offsets) <= limit:
+        return text
+    end = offsets[limit - 1][1]
+    return text[:end].rstrip() + " …"
 
 
 def _split_rows(header_line: str, row_lines: list[str], rows: list[dict], limit: int):
@@ -202,7 +215,7 @@ def make_table_chunks(filing: dict, table: dict, table_option: int, section_titl
     page_start = table.get("page_start")
     raw_text = table.get("text", "") or ""
     lines = raw_text.split("\n")
-    header_line = lines[0] if lines else ""
+    header_line = _cap_tokens(lines[0] if lines else "", TABLE_CHUNK_LIMIT // 2)
     row_lines = lines[1:]
     rows = table.get("rows") or []
 
