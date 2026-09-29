@@ -62,9 +62,9 @@ METHODS = ["bm25", "vector", "hybrid"]
 EF_SEARCH_VALUES = (40, 100, 200)
 
 
-def matrix_a() -> list[dict[str, str]]:
-    """The 7 indexes x 3 methods = 21 runs of experiment A."""
-    return [{"index": idx, "search": method} for idx in INDEXES for method in METHODS]
+def matrix_a(indexes: list[str] | None = None) -> list[dict[str, str]]:
+    """indexes x 3 methods runs of experiment A (all 7 indexes by default)."""
+    return [{"index": idx, "search": method} for idx in (indexes or INDEXES) for method in METHODS]
 
 
 def run_experiment_a(
@@ -74,6 +74,7 @@ def run_experiment_a(
     golden_path: Path | str | None = None,
     parsed_dir: Path | str | None = None,
     results_dir: Path | str | None = None,
+    indexes: list[str] | None = None,
 ) -> list[str]:
     """Run every (index, method) combination through `run_eval`, oracle routing.
 
@@ -84,7 +85,7 @@ def run_experiment_a(
     run_ids, in matrix order, so callers can pass them to `evals.report`.
     """
     run_ids = []
-    for combo in matrix_a():
+    for combo in matrix_a(indexes):
         retriever = Retriever(index_name=combo["index"], method=combo["search"], k=k, top=top)
         config = {
             "index": combo["index"],
@@ -154,9 +155,9 @@ def run_experiment_hnsw(
     return results
 
 
-def _print_dry_run_matrix_a() -> None:
-    combos = matrix_a()
-    print(f"Experiment A: {len(combos)} runs ({len(INDEXES)} indexes x {len(METHODS)} methods), oracle routing")
+def _print_dry_run_matrix_a(indexes: list[str] | None = None) -> None:
+    combos = matrix_a(indexes)
+    print(f"Experiment A: {len(combos)} runs ({len(indexes or INDEXES)} indexes x {len(METHODS)} methods), oracle routing")
     for i, combo in enumerate(combos, start=1):
         print(f"  {i:2d}. index={combo['index']:<16} search={combo['search']}")
 
@@ -183,13 +184,23 @@ def _write_winners(run_ids: list[str], results_dir: Path | str | None = None) ->
     by_id = {r["run_id"]: r for r in rows}
     runs = [by_id[i] for i in run_ids if i in by_id]
 
+    def recall_key(r):
+        # The harness names the headline metric recall@{k}; pick that key
+        # (not the token-budget or per-type variants).
+        return next(
+            k for k in r["metrics"]
+            if k.startswith("recall@") and "tok" not in k and "_" not in k
+        )
+
     def key(r):
         m = r["metrics"]
-        return (m.get("recall@8", {}).get("value", 0), m.get("mrr", {}).get("value", 0))
+        return (m[recall_key(r)]["value"], m.get("mrr", {}).get("value", 0))
 
     best = max(runs, key=key)
+    rk = recall_key(best)
     winners = {"index": best["config"]["index"], "search": best["config"]["search"],
-               "run_id": best["run_id"], "recall@8": best["metrics"]["recall@8"]["value"],
+               "run_id": best["run_id"], "recall_metric": rk,
+               "recall": best["metrics"][rk]["value"], "recall_ci95": best["metrics"][rk]["ci95"],
                "mrr": best["metrics"]["mrr"]["value"], "n_questions": best["n_questions"]}
     out_dir = Path("runs/wave-5"); out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "winners.json").write_text(json.dumps(winners, indent=2), encoding="utf-8")
@@ -201,7 +212,6 @@ def _write_winners(run_ids: list[str], results_dir: Path | str | None = None) ->
 
 
 def main(argv: list[str] | None = None) -> int:
-    global INDEXES
     parser = argparse.ArgumentParser(prog="citation_rag.search.experiments")
     parser.add_argument("--exp", required=True, choices=["A", "hnsw"])
     parser.add_argument("--index", default=None, help="index name for --exp hnsw (default: the experiment A winner, else the first available)")
@@ -213,20 +223,22 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.indexes:
-        INDEXES = [x.strip() for x in args.indexes.split(",") if x.strip()]
+        indexes = [x.strip() for x in args.indexes.split(",") if x.strip()]
     elif not args.dry_run:
-        INDEXES = available_indexes()
-        print(f"available indexes: {INDEXES}")
+        indexes = available_indexes()
+        print(f"available indexes: {indexes}")
+    else:
+        indexes = list(INDEXES)
 
     if args.dry_run:
         if args.exp == "A":
-            _print_dry_run_matrix_a()
+            _print_dry_run_matrix_a(indexes)
         else:
-            _print_dry_run_hnsw(args.index or INDEXES[0])
+            _print_dry_run_hnsw(args.index or indexes[0])
         return 0
 
     if args.exp == "A":
-        run_ids = run_experiment_a(split=args.split, k=args.k, top=args.top)
+        run_ids = run_experiment_a(split=args.split, k=args.k, top=args.top, indexes=indexes)
         _write_winners(run_ids)
         return 0
 
@@ -235,7 +247,7 @@ def main(argv: list[str] | None = None) -> int:
     index_name = args.index
     if index_name is None:
         wpath = Path("runs/wave-5/winners.json")
-        index_name = json.loads(wpath.read_text())["index"] if wpath.exists() else INDEXES[0]
+        index_name = json.loads(wpath.read_text())["index"] if wpath.exists() else indexes[0]
     results = run_experiment_hnsw(index_name, split=args.split, k=args.k)
     out_dir = Path("runs/wave-5"); out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "hnsw_check.json").write_text(json.dumps({"index": index_name, "results": results}, indent=2), encoding="utf-8")

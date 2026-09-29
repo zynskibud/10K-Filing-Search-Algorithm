@@ -618,6 +618,7 @@ def test_retriever_mmr_reranker_respects_per_company_cut(pg_schema, bm25_fixture
         index_name=index_name,
         method="hybrid",
         k=50,
+        top=3,
         per_company_top=3,
         schema=schema,
         bm25_index=bm25_fixture_index,
@@ -657,9 +658,12 @@ def test_experiments_main_dry_run_prints_matrix(capsys):
         assert idx in out
 
 
-def test_experiments_main_refuses_without_dry_run():
-    rc = experiments.main(["--exp", "A"])
-    assert rc == 1
+def test_experiments_main_dry_run_with_index_subset(capsys):
+    rc = experiments.main(["--exp", "A", "--dry-run", "--indexes", "bge_small__s1,bge_m3__s3"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "6 runs" in out and "bge_m3__s3" in out
+    assert len(experiments.INDEXES) == 7  # the module default is never mutated
 
 
 def test_experiments_main_dry_run_hnsw(capsys):

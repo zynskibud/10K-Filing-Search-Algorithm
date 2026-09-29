@@ -88,7 +88,7 @@ def search(
     qvec: Sequence[float],
     k: int = 50,
     ciks: Sequence[str] | None = None,
-    ef_search: int = 100,
+    ef_search: int = 200,
     schema: str | None = None,
     pool: ConnectionPool | None = None,
 ) -> list[tuple[object, float]]:

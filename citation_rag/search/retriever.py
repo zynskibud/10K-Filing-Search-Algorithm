@@ -77,7 +77,7 @@ class Retriever:
     method: str
     k: int = 50
     top: int = 8
-    ef_search: int = 100
+    ef_search: int = 200  # wave 5 HNSW check: 0.80 recall at 40, 0.95 at 100, 0.965 at 200, same latency
     per_company_top: int = 4
     general_cap: int = 2
     router: Router | None = None

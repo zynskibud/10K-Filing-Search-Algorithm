@@ -297,8 +297,11 @@ def run_eval(
         detail_rows.append({"id": case.id, "hit_rank": rank, "top_result_ids": top_ids})
 
     metrics: dict[str, Any] = {}
+    # Recall is measured over the results the retriever returned (at most
+    # `top`), so the label says @top, not @k (k is the candidate pool size).
+    n_label = min(k, top)
     if recall_values:
-        metrics[f"recall@{k}"] = {"value": sum(recall_values) / len(recall_values), "ci95": bootstrap_ci(recall_values)}
+        metrics[f"recall@{n_label}"] = {"value": sum(recall_values) / len(recall_values), "ci95": bootstrap_ci(recall_values)}
     if mrr_values:
         metrics["mrr"] = {"value": sum(mrr_values) / len(mrr_values), "ci95": bootstrap_ci(mrr_values)}
     if budget_values:
@@ -313,11 +316,11 @@ def run_eval(
         by_table = split_by_table(scored_cases, recall_values)
         for key, vals in by_table.items():
             if vals:
-                metrics[f"recall@{k}_{key}"] = {"value": sum(vals) / len(vals), "ci95": bootstrap_ci(vals)}
+                metrics[f"recall@{n_label}_{key}"] = {"value": sum(vals) / len(vals), "ci95": bootstrap_ci(vals)}
         by_type = split_by_type(scored_cases, recall_values)
         for qtype, vals in by_type.items():
             if vals:
-                metrics[f"recall@{k}_{qtype}"] = {"value": sum(vals) / len(vals), "ci95": bootstrap_ci(vals)}
+                metrics[f"recall@{n_label}_{qtype}"] = {"value": sum(vals) / len(vals), "ci95": bootstrap_ci(vals)}
 
     if latencies_ms:
         metrics["latency_ms_p50"] = median(latencies_ms)
