@@ -422,3 +422,57 @@ def test_run_all_main_dry_run(capsys: pytest.CaptureFixture[str]) -> None:
     assert len(out_lines) == 4
     run_names = [json.loads(line)["run_name"] for line in out_lines]
     assert run_names == run_all.RUN_NAMES
+
+
+# ---------------------------------------------------------------------------
+# run_all.py: config from wave 5 winners plus a reranker name (wave 7 prep)
+# ---------------------------------------------------------------------------
+
+
+def test_run_all_load_config_reads_winners_and_reranker_name(tmp_path: Path) -> None:
+    winners = tmp_path / "winners.json"
+    winners.write_text(json.dumps({"index": "bge_small__s2", "search": "hybrid", "recall": 0.78}))
+    config = run_all.load_config(winners)
+    assert config["index"] == "bge_small__s2" and config["search"] == "hybrid"
+    assert config["reranker"] == "monot5"  # the default
+    assert (config["k"], config["top"]) == (50, 8)
+    assert "recall" not in config
+    assert run_all.load_config(winners, "mmr")["reranker"] == "mmr"
+
+    override = tmp_path / "override.json"
+    override.write_text(json.dumps({"top": 5}))
+    assert run_all.load_config(winners, "none", override)["top"] == 5
+
+    with pytest.raises(FileNotFoundError):
+        run_all.load_config(tmp_path / "missing.json")
+    assert run_all.load_config(tmp_path / "missing.json", required=False) == {"reranker": "monot5", "k": 50, "top": 8}
+
+
+def test_run_all_dry_run_uses_winners_file_and_reranker_arg(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    winners = tmp_path / "winners.json"
+    winners.write_text(json.dumps({"index": "bge_small__s2", "search": "hybrid"}))
+    rc = run_all.main(["--dry-run", "--winners", str(winners), "--reranker", "llm_listwise", "--runs", "B_think"])
+    assert rc == 0
+    lines = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert len(lines) == 1
+    assert lines[0]["config"]["index"] == "bge_small__s2"
+    assert lines[0]["config"]["reranker"] == "llm_listwise"
+    assert lines[0]["config"]["mode"] == "rag"
+
+
+def test_run_all_builds_listwise_and_mmr_rerankers(monkeypatch: pytest.MonkeyPatch) -> None:
+    from citation_rag.search import retriever as retriever_mod
+
+    monkeypatch.setattr(retriever_mod, "_embedder_for_index", lambda name: (lambda text: [0.0, 1.0]))
+    listwise = run_all._build_reranker({"reranker": "llm_listwise", "index": "bge_small__s2"})
+    assert listwise.name == "llm_listwise"
+    mmr = run_all._build_reranker({"reranker": "mmr", "index": "bge_small__s2"})
+    assert mmr.name == "mmr" and callable(mmr.vector_lookup)
+    assert run_all._build_reranker({"reranker": "none"}).__class__.__name__ == "NoneReranker"
+
+
+def test_run_all_retriever_carries_the_reranker_hook() -> None:
+    sentinel = object()
+    retriever = run_all._build_retriever({"index": "bge_small__s2", "search": "hybrid", "top": 8}, sentinel)
+    assert retriever.reranker is sentinel
+    assert (retriever.k, retriever.top, retriever.per_company_top, retriever.general_cap) == (50, 8, 8, 8)

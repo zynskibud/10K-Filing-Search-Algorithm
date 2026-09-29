@@ -9,11 +9,17 @@ Integration-1 item 3: `OllamaJudge` now makes its call through
 `citation_rag.llm.OllamaClient` (the client shared with the router, the
 listwise reranker, and the answer stage) with the shared 900s default
 timeout, instead of its own inline `httpx` call.
+
+CLI (wave 7, after calibration):
+    uv run python -m citation_rag.evals.judge score --answers evals/answers/B_think.jsonl
 """
 
 from __future__ import annotations
 
+import argparse
 import json
+import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Protocol
@@ -192,3 +198,141 @@ def refusal(
     raw = client.complete(prompt)
     data = _parse_label_response(raw, allowed)
     return Judgment(data["label"], data["reason"], prompt_version, client.model, raw)
+
+
+# -- scoring an answers file (the wave 7 `score` command) --------------------
+
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+ANSWERS_DIR = PROJECT_ROOT / "evals" / "answers"
+JUDGED_DIR = PROJECT_ROOT / "evals" / "judged"
+
+
+def _sentence_with_marker(answer: str, ref: int) -> str:
+    marker = f"[{ref}]"
+    for sentence in _SENTENCE_SPLIT.split(answer):
+        if marker in sentence:
+            return sentence
+    return answer
+
+
+def score_row(client: JudgeClient, row: dict, golden: "dict | None" = None) -> dict:
+    """Judge one run_all answer row: correctness, refusal, and (when the row
+    has context blocks) faithfulness and per-citation support. A judge reply
+    that does not parse gives an `error` entry for that measure, not a crash."""
+    golden = golden or {}
+    answer_obj = row.get("answer")
+    answer = answer_obj.get("answer", "") if isinstance(answer_obj, dict) else str(answer_obj or "")
+    citations = answer_obj.get("citations", []) if isinstance(answer_obj, dict) else []
+    question = row.get("question") or golden.get("question", "")
+    reference = row.get("reference") or golden.get("answer", "")
+    case_type = row.get("type") or golden.get("type")
+    blocks = row.get("blocks") or []
+    scores: dict = {}
+
+    def attempt(key: str, fn):
+        try:
+            scores[key] = fn()
+        except JudgeParseError as exc:
+            scores[key] = {"error": str(exc)}
+
+    def judgment_dict(j: Judgment) -> dict:
+        return {"label": j.label, "reason": j.reason}
+
+    attempt("correctness", lambda: judgment_dict(correctness(client, question, reference, answer)))
+    attempt(
+        "refusal",
+        lambda: judgment_dict(refusal(client, question, answer, is_unanswerable=(case_type == "unanswerable"))),
+    )
+    if blocks:
+        context = "\n\n".join(f"[{b.get('ref')}] {b.get('text', '')}" for b in blocks)
+
+        def _faith() -> dict:
+            judgments, score = faithfulness(client, answer, context)
+            return {"score": score, "claims": [judgment_dict(j) for j in judgments]}
+
+        attempt("faithfulness", _faith)
+        by_ref = {b.get("ref"): b for b in blocks}
+        support = []
+        for c in citations:
+            block = by_ref.get(c.get("ref"))
+            if block is None:
+                support.append({"ref": c.get("ref"), "label": "does_not_support", "reason": "ref not in blocks"})
+                continue
+            try:
+                j = citation_support(client, _sentence_with_marker(answer, c["ref"]), block.get("text", ""))
+                support.append({"ref": c["ref"], **judgment_dict(j)})
+            except JudgeParseError as exc:
+                support.append({"ref": c.get("ref"), "error": str(exc)})
+        scores["citation_support"] = support
+    return {"id": row.get("id"), "type": case_type, "scores": scores}
+
+
+def score_answers(
+    answers_path: "str | Path",
+    client: JudgeClient,
+    out_path: "str | Path | None" = None,
+    golden_path: "str | Path | None" = None,
+) -> dict:
+    """Judge every row of an answers file. Writes one JSON line per row to
+    `out_path` (default `evals/judged/{run}.jsonl`) and returns a summary."""
+    answers_path = Path(answers_path)
+    golden: dict[str, dict] = {}
+    if golden_path is not None and Path(golden_path).exists():
+        for line in Path(golden_path).read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                g = json.loads(line)
+                golden[g["id"]] = g
+    out_path = Path(out_path) if out_path else JUDGED_DIR / f"{answers_path.stem}.jsonl"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    n = 0
+    correct = 0
+    faith_scores: list[float] = []
+    with answers_path.open("r", encoding="utf-8") as f, out_path.open("w", encoding="utf-8") as out:
+        for line in f:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            result = score_row(client, row, golden.get(row.get("id")))
+            result["run"] = answers_path.stem
+            result["judge_model"] = getattr(client, "model", None)
+            out.write(json.dumps(result) + "\n")
+            n += 1
+            if result["scores"].get("correctness", {}).get("label") == "correct":
+                correct += 1
+            faith = result["scores"].get("faithfulness", {})
+            if "score" in faith:
+                faith_scores.append(faith["score"])
+    return {
+        "run": answers_path.stem,
+        "n": n,
+        "correct_share": (correct / n) if n else None,
+        "faithfulness_mean": (sum(faith_scores) / len(faith_scores)) if faith_scores else None,
+        "out_path": str(out_path),
+    }
+
+
+def main(argv: "list[str] | None" = None, client: "JudgeClient | None" = None) -> int:
+    """`score --answers evals/answers/X.jsonl [--golden ...] [--out ...] [--model ...]`.
+    `client` is for tests (a `FakeJudge`); the CLI builds an `OllamaJudge`."""
+    parser = argparse.ArgumentParser(prog="citation_rag.evals.judge")
+    sub = parser.add_subparsers(dest="command", required=True)
+    p_score = sub.add_parser("score", help="judge an answers file written by run_all")
+    p_score.add_argument("--answers", required=True)
+    p_score.add_argument("--split", default="dev")
+    p_score.add_argument("--golden", default=None, help="default: evals/golden/{split}.jsonl")
+    p_score.add_argument("--out", default=None, help="default: evals/judged/{run}.jsonl")
+    p_score.add_argument("--model", default="gpt-oss:20b")
+    args = parser.parse_args(argv)
+
+    if args.command == "score":
+        judge_client = client or OllamaJudge(model=args.model)
+        golden = args.golden or str(PROJECT_ROOT / "evals" / "golden" / f"{args.split}.jsonl")
+        summary = score_answers(args.answers, judge_client, out_path=args.out, golden_path=golden)
+        print(json.dumps(summary))
+        return 0
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

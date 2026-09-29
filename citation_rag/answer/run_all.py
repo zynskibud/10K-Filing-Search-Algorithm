@@ -13,9 +13,8 @@ run_log id, latencies) and prints per-run counts (answered, refused,
 citation-valid share). No judge call here -- that is
 `citation_rag.evals.judge`, run separately in wave 7 after calibration.
 
-This wave is LIGHT (no Ollama, no corpus reads beyond fixtures): the real
-four Qwen runs happen later, GPU class, through `scripts/run.sh 7` after GO.
-`--dry-run` is what this wave's tests and definition-of-done exercise.
+The real four Qwen runs are GPU class and go through `scripts/run.sh 7` after
+GO. `--dry-run` prints the plan and needs no database, model, or Ollama.
 """
 
 from __future__ import annotations
@@ -26,7 +25,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from citation_rag.answer.base import NoRerank
 from citation_rag.answer.llm import OllamaChat
 from citation_rag.answer.pipeline import answer
 from citation_rag.evals.golden import GoldenCase, load_golden
@@ -56,50 +54,66 @@ def _golden_path(split: str) -> Path:
     raise FileNotFoundError(f"no golden file found at {candidate}")
 
 
-def _build_retriever(config: dict) -> Any:
-    from citation_rag.search.retriever import Retriever
+DEFAULT_WINNERS = PROJECT_ROOT / "runs" / "wave-5" / "winners.json"
+WAVE7_DIR = PROJECT_ROOT / "runs" / "wave-7"
+DEFAULT_RERANKER = "monot5"
+CANDIDATE_K = 50
+TOP_K = 8
 
-    return Retriever(
-        index_name=config["index"],
-        method=config["search"],
-        k=config.get("k", 50),
-        top=config.get("top", 8),
-    )
+
+def load_config(
+    winners_path: "str | Path | None" = DEFAULT_WINNERS,
+    reranker: str = DEFAULT_RERANKER,
+    config_path: "str | Path | None" = None,
+    *,
+    required: bool = True,
+) -> dict:
+    """`{index, search, reranker, k, top}` from the wave 5 winners file plus a
+    reranker name. `config_path` (a JSON object) overrides any key. With
+    `required=False` a missing winners file gives just the reranker (dry runs)."""
+    config: dict[str, Any] = {}
+    path = Path(winners_path) if winners_path else None
+    if path is not None and path.exists():
+        winners = json.loads(path.read_text(encoding="utf-8"))
+        config.update({"index": winners["index"], "search": winners["search"]})
+    elif required and config_path is None:
+        raise FileNotFoundError(f"winners file not found: {path}")
+    config["reranker"] = reranker
+    config.setdefault("k", CANDIDATE_K)
+    config.setdefault("top", TOP_K)
+    if config_path:
+        config.update(json.loads(Path(config_path).read_text(encoding="utf-8")))
+    return config
 
 
 def _build_reranker(config: dict) -> Any:
-    """Build the winner reranker from wave 6's `citation_rag/rerank/`.
+    """The reranker named in `config["reranker"]`, built by wave 6's factory
+    (`citation_rag.rerank.experiments.build_reranker`). `mmr` reads vectors
+    from `chunks_{index}`; `llm_listwise` gets a shared Ollama client."""
+    from citation_rag.rerank.experiments import build_reranker
 
-    Imported here, not duplicated. `none`, `cross_encoder`, `monot5`, and
-    `colbert` need no extra collaborators beyond their own defaults. `mmr`
-    (needs a chunk-vector lookup) and `llm_listwise` (needs an LLM client)
-    need collaborators this function does not have, so they raise with a
-    clear reason instead of guessing -- wiring those is the GPU-class
-    execution step (`scripts/run.sh 7`), not this LIGHT wave.
-    """
-    reranker_name = config.get("reranker", "none")
-    if reranker_name in (None, "none"):
-        return NoRerank()
+    name = config.get("reranker") or "none"
+    kwargs: dict[str, Any] = {}
+    if config.get("reranker_device") and name in ("monot5", "cross_encoder", "colbert"):
+        kwargs["device"] = config["reranker_device"]
+    return build_reranker(name, config.get("index"), **kwargs)
 
-    if reranker_name == "cross_encoder":
-        from citation_rag.rerank.cross_encoder import CrossEncoderReranker
 
-        return CrossEncoderReranker()
-    if reranker_name == "monot5":
-        from citation_rag.rerank.monot5 import MonoT5Reranker
+def _build_retriever(config: dict, reranker: Any = None) -> Any:
+    """Retriever as wave 6 measured it: `k` candidates in, reranked through
+    the retriever hook, `top` out per company."""
+    from citation_rag.search.retriever import Retriever
 
-        return MonoT5Reranker()
-    if reranker_name == "colbert":
-        from citation_rag.rerank.colbert import ColbertReranker
-
-        return ColbertReranker()
-    if reranker_name in ("mmr", "llm_listwise"):
-        raise NotImplementedError(
-            f"reranker {reranker_name!r} needs extra collaborators "
-            "(a chunk-vector lookup for mmr, an LLM client for llm_listwise) "
-            "that run_all.py does not build; wire it in at execution time"
-        )
-    raise ValueError(f"unknown reranker: {reranker_name!r}")
+    top = config.get("top", TOP_K)
+    return Retriever(
+        index_name=config["index"],
+        method=config["search"],
+        k=config.get("k", CANDIDATE_K),
+        top=top,
+        per_company_top=top,
+        general_cap=top,
+        reranker=reranker,
+    )
 
 
 def plan(split: str, run_names: list[str], winner_config: dict) -> list[dict]:
@@ -127,7 +141,7 @@ def run_one(
     winner_config: dict,
     *,
     retriever: Any,
-    reranker: Any,
+    reranker: Any = None,
     out_dir: Path,
 ) -> dict:
     settings = _run_settings(run_name)
@@ -170,6 +184,12 @@ def run_one(
                             "citations": record.citations,
                             "answerable": record.answerable,
                         },
+                        "question": case.question,
+                        "type": case.type,
+                        "reference": case.answer,
+                        "blocks": [
+                            {"ref": b.ref, "section_id": b.section_id, "text": b.text} for b in record.blocks
+                        ],
                         "citation_check": vars(record.citation_check),
                         "run_log_id": record.run_log_id,
                         "latency_ms": record.latency_ms,
@@ -191,30 +211,39 @@ def main(argv: "list[str] | None" = None) -> int:
     parser = argparse.ArgumentParser(prog="citation_rag.answer.run_all")
     parser.add_argument("--split", default="dev", choices=["dev", "test"])
     parser.add_argument("--runs", nargs="+", default=RUN_NAMES, choices=RUN_NAMES)
-    parser.add_argument("--config", default=None, help="path to the winner config JSON (index, search, reranker, top, k)")
+    parser.add_argument("--winners", default=str(DEFAULT_WINNERS), help="wave 5 winners.json (index, search)")
+    parser.add_argument("--reranker", default=DEFAULT_RERANKER, help="reranker name (default monot5)")
+    parser.add_argument("--config", default=None, help="optional JSON that overrides the resolved config")
+    parser.add_argument("--out-dir", default=str(WAVE7_DIR), help="where config.json and summary.json go")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
-    winner_config: dict[str, Any] = {}
-    if args.config:
-        winner_config = json.loads(Path(args.config).read_text(encoding="utf-8"))
+    winner_config = load_config(args.winners, args.reranker, args.config, required=not args.dry_run)
 
     if args.dry_run:
         for item in plan(args.split, args.runs, winner_config):
             print(json.dumps(item))
         return 0
 
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "config.json").write_text(json.dumps(winner_config, indent=2), encoding="utf-8")
+
     cases = load_golden(_golden_path(args.split))
 
-    retriever = _build_retriever(winner_config) if any(_run_settings(r)["mode"] == "rag" for r in args.runs) else None
     reranker = _build_reranker(winner_config)
+    retriever = (
+        _build_retriever(winner_config, reranker)
+        if any(_run_settings(r)["mode"] == "rag" for r in args.runs)
+        else None
+    )
 
-    summaries = [
-        run_one(run_name, cases, winner_config, retriever=retriever, reranker=reranker, out_dir=ANSWERS_DIR)
-        for run_name in args.runs
-    ]
-    for s in summaries:
-        print(json.dumps(s))
+    summaries = []
+    for run_name in args.runs:
+        summary = run_one(run_name, cases, winner_config, retriever=retriever, out_dir=ANSWERS_DIR)
+        print(json.dumps(summary), flush=True)
+        summaries.append(summary)
+        (out_dir / "summary.json").write_text(json.dumps(summaries, indent=2), encoding="utf-8")
     return 0
 
 

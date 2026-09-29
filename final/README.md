@@ -12,7 +12,12 @@ prompt, the citation check — is reimplemented directly in this file so it stan
 its own and can be read start to finish. See the module docstring in `rag.py` for the
 one-paragraph version of this.
 
-## Status: winners not yet known
+## Status: waves 5 and 6 decided, wave 7 pending
+
+`runs/wave-5/winners.json` sets `index` bge_small__s2 and `search` hybrid (recall@8
+0.783). `runs/wave-6/winners.json` sets `reranker` monot5 (provisional: recall@8
+0.831, MRR 0.558; final only if wave 7 shows the answer gain holds). `rag.py` supports
+`cross_encoder`, `monot5`, and `none`. The text below describes the defaults.
 
 Waves 5, 6, and 7 (which pick the winning index/search method, reranker, and
 thinking setting on the dev set) have not run yet. `CONFIG` at the top of `rag.py`
@@ -22,7 +27,7 @@ therefore ships with the plan's *expected* winners as defaults:
 CONFIG = {
     "index": "bge_small__s3",       # bge-small, chunking strategy 3 (paragraph-based, in-section)
     "search": "hybrid",             # BM25 + vector, merged with RRF
-    "reranker": "cross_encoder",    # bge-reranker-v2-m3
+    "reranker": "cross_encoder",    # "cross_encoder" (bge-reranker-v2-m3) | "monot5" | "none"
     "thinking": False,
     "table_option": "labels_only",  # informational only; baked into the chunk table at index time
 }
@@ -139,19 +144,6 @@ trade-offs, not oversights:
   and, if so, to propose the smallest change. It does not force one here: see block
   3 above (`_BM25Unpickler`) for the loader that avoids it without touching
   `citation_rag/search/bm25.py`. No change to that file was needed.
-- **Only one reranker family.** `CONFIG["reranker"]` supports `"cross_encoder"` or
-  `"none"` (not MMR, ColBERT, monoT5, or the LLM listwise reranker from
+- **Three rerank choices.** `CONFIG["reranker"]` supports `"cross_encoder"`, `"monot5"`,
+  and `"none"` (not MMR, ColBERT, or the LLM listwise reranker from
   `citation_rag/rerank/`), since only one reranker wins per the wave-6 contract.
-
-## Tests
-
-`tests/test_final.py` (owned alongside this file) checks: the 300-line cap; the
-`CONFIG`/`winners.json` override mechanism; BM25 tokenizing, the unpickle-without-
-`citation_rag` loader, and scoring (checked against a real `BM25Index` built in the
-test file); RRF against a hand-computed example; retrieval, small-to-big context
-assembly, and a full `answer_question()` run against a throwaway Postgres schema
-(`test_wave8a`) loaded from `tests/fixtures/search_chunks.jsonl` (200 chunks, real
-384-d vectors); prompt building; response parsing; the citation check's five cases;
-and `call_llm`'s request shape and `main()`'s argument wiring, both without any real
-network or Ollama call. A `FakeLLMClient` (from `citation_rag.llm`, reused only in
-the test file) stands in for Qwen throughout.

@@ -635,6 +635,84 @@ def test_retriever_mmr_reranker_respects_per_company_cut(pg_schema, bm25_fixture
     assert all(r.accession_no.startswith("0000000001") for r in results)
 
 
+@pg_required
+def test_make_vector_lookup_returns_stored_vectors_by_chunk_id(pg_schema, search_chunks):
+    from citation_rag.rerank.experiments import make_vector_lookup
+
+    schema, index_name = pg_schema
+    lookup = make_vector_lookup(index_name, schema=schema)
+    ids = [search_chunks[0]["id"], search_chunks[1]["id"]]
+    vecs = lookup(ids)
+    assert set(vecs) == set(ids)
+    assert len(vecs[ids[0]]) == 384
+    assert vecs[ids[0]] == pytest.approx(search_chunks[0]["embedding"], abs=1e-5)
+    assert lookup([]) == {}
+
+
+@pg_required
+def test_build_reranker_mmr_wires_lookup_and_query_embedder(pg_schema, bm25_fixture_index, monkeypatch):
+    """`build_reranker("mmr", index)` needs no hand-made collaborators: the
+    vectors come from chunks_{index}, the query embedder from the index name."""
+    from citation_rag.rerank import experiments as rerank_experiments
+    from citation_rag.search import retriever as retriever_mod
+
+    schema, index_name = pg_schema
+    asked = []
+
+    def fake_embedder_for_index(name):
+        asked.append(name)
+        return lambda text: [((i * 7 + len(text)) % 13) / 13.0 - 0.4 for i in range(384)]
+
+    monkeypatch.setattr(retriever_mod, "_embedder_for_index", fake_embedder_for_index)
+
+    with pytest.raises(ValueError, match="index"):
+        rerank_experiments.build_reranker("mmr")
+
+    reranker = rerank_experiments.build_reranker("mmr", index_name, schema=schema)
+    assert asked == [index_name]
+
+    retriever = Retriever(
+        index_name=index_name,
+        method="bm25",
+        k=50,
+        top=3,
+        per_company_top=3,
+        schema=schema,
+        bm25_index=bm25_fixture_index,
+        reranker=reranker,
+    )
+    results = retriever("revenue growth results of operations", companies=["0000000001"])
+    assert len(results) == 3
+    assert all(r.rerank_score is not None for r in results)
+
+
+def test_build_reranker_llm_listwise_gets_a_client_and_unknown_name_raises():
+    from citation_rag.rerank import experiments as rerank_experiments
+
+    fake = FakeLLMClient('{"order": [1]}')
+    reranker = rerank_experiments.build_reranker("llm_listwise", "bge_small__s2", llm_client=fake)
+    assert reranker.client is fake
+    default = rerank_experiments.build_reranker("llm_listwise", "bge_small__s2")
+    assert default.client.think is False and default.client.format == "json"
+    with pytest.raises(ValueError, match="unknown reranker"):
+        rerank_experiments.build_reranker("nope")
+
+
+def test_rerank_experiments_rerankers_flag_and_winners_file(tmp_path, capsys):
+    from citation_rag.rerank import experiments as rerank_experiments
+
+    winners = tmp_path / "winners.json"
+    winners.write_text(json.dumps({"index": "bge_small__s2", "search": "hybrid"}))
+    rc = rerank_experiments.main(["--winners", str(winners), "--rerankers", "llm_listwise,mmr", "--dry-run"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "2 run(s)" in out
+    assert "index=bge_small__s2 search=hybrid reranker=llm_listwise" in out
+    assert "reranker=mmr" in out and "reranker=colbert" not in out
+    with pytest.raises(SystemExit):
+        rerank_experiments.main(["--winners", str(winners), "--rerankers", "bogus", "--dry-run"])
+
+
 # --------------------------------------------------------------------------
 # experiments.py: dry-run matrix
 # --------------------------------------------------------------------------

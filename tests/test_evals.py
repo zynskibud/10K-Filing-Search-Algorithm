@@ -623,3 +623,91 @@ def test_report_compare_two_runs(tmp_path):
     assert record_a.run_id in table
     assert record_b.run_id in table
     assert "recall@8" in table
+
+
+# --------------------------------------------------------------------------
+# CLI: `judge score` and `calibration export` on run_all-shaped answers
+# --------------------------------------------------------------------------
+
+
+def _run_all_rows(n: int = 6) -> list[dict]:
+    rows = []
+    for i in range(n):
+        unanswerable = i % 3 == 2
+        rows.append(
+            {
+                "id": f"g{i}",
+                "question": f"Question {i}?",
+                "type": "unanswerable" if unanswerable else "fact_lookup",
+                "reference": "ref",
+                "answer": {
+                    "answer": "Cash was $5 million [1]." if not unanswerable else "The filings do not contain this information.",
+                    "citations": [{"ref": 1, "quote": "cash of $5 million"}] if not unanswerable else [],
+                    "answerable": not unanswerable,
+                },
+                "blocks": [{"ref": 1, "section_id": "s", "text": "We hold cash of $5 million."}],
+            }
+        )
+    return rows
+
+
+def _write_rows(path, rows):
+    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+
+
+def _routing_fake_judge() -> judge.FakeJudge:
+    """Replies with a label that is valid for whichever prompt it gets."""
+
+    def respond(prompt: str) -> str:
+        if prompt.startswith("You split a model's answer"):
+            return json.dumps({"reason": "r", "claims": ["Cash was $5 million."]})
+        if prompt.startswith("You check whether a single claim"):
+            return json.dumps({"reason": "r", "label": "supported"})
+        if prompt.startswith("You check whether a cited chunk"):
+            return json.dumps({"reason": "r", "label": "supports"})
+        if prompt.startswith("You check whether a model answered or refused"):
+            refuse = "unanswerable from the filing: True" in prompt
+            return json.dumps({"reason": "r", "label": "refused" if refuse else "answered"})
+        return json.dumps({"reason": "r", "label": "correct"})
+
+    return judge.FakeJudge(respond)
+
+
+def test_judge_score_cli_with_fake_judge(tmp_path, capsys):
+    answers = tmp_path / "B_think.jsonl"
+    _write_rows(answers, _run_all_rows(4))
+    out = tmp_path / "judged.jsonl"
+
+    rc = judge.main(["score", "--answers", str(answers), "--out", str(out), "--golden", str(tmp_path / "none.jsonl")], client=_routing_fake_judge())
+    assert rc == 0
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["run"] == "B_think" and summary["n"] == 4
+    rows = [json.loads(line) for line in out.read_text().splitlines()]
+    assert len(rows) == 4
+    first = rows[0]["scores"]
+    assert set(first) >= {"correctness", "refusal", "faithfulness", "citation_support"}
+    assert first["citation_support"][0]["ref"] == 1
+
+
+def test_judge_score_row_records_parse_errors_instead_of_crashing():
+    row = _run_all_rows(1)[0]
+    result = judge.score_row(judge.FakeJudge("not json"), row)
+    assert "error" in result["scores"]["correctness"]
+
+
+def test_calibration_export_cli_defaults_to_answers_dir(tmp_path, capsys):
+    answers_dir = tmp_path / "answers"
+    answers_dir.mkdir()
+    _write_rows(answers_dir / "A_think.jsonl", _run_all_rows(8))
+    _write_rows(answers_dir / "B_think.jsonl", _run_all_rows(8))
+    _write_rows(answers_dir / "B_think.judged.jsonl", [{"junk": 1}])
+    out_dir = tmp_path / "calibration"
+
+    rc = calibration.main(["export", "--n", "10", "--answers-dir", str(answers_dir), "--out-dir", str(out_dir)])
+    assert rc == 0
+    with (out_dir / "sheet.csv").open() as f:
+        sheet = list(__import__("csv").DictReader(f))
+    assert len(sheet) == 10
+    assert {r["answer"] for r in sheet} <= {"Cash was $5 million [1].", "The filings do not contain this information."}
+    assert all(r["retrieved_text_excerpt"].startswith("[1] We hold cash") for r in sheet)
+    assert all(r["question"] for r in sheet)

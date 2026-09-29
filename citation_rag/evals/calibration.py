@@ -7,7 +7,13 @@ question, reference, answer, retrieved_text_excerpt. See "judgment calls" in
 reports/wave-3b.md.
 
 CLI:
-    uv run python -m citation_rag.evals.calibration export answers.jsonl --n 40 --holdout 15
+    uv run python -m citation_rag.evals.calibration export --n 40
+    uv run python -m citation_rag.evals.calibration export evals/answers/B_think.jsonl --n 40 --holdout 15
+
+With no answers path, `export` samples across every `evals/answers/*.jsonl`
+run file (the files `citation_rag.answer.run_all` writes). Those rows nest the
+answer (`{"answer": {"answer", "citations", "answerable"}, "blocks": [...]}`);
+`_load_answers` flattens them to the row shape above.
 """
 
 from __future__ import annotations
@@ -29,13 +35,38 @@ CALIBRATION_DIR = PROJECT_ROOT / "evals" / "calibration"
 SHEET_COLUMNS = ["id", "question", "reference", "answer", "retrieved_text_excerpt", "human_label"]
 
 
-def _load_answers(answers_path: str | Path) -> list[dict[str, Any]]:
+ANSWERS_DIR = PROJECT_ROOT / "evals" / "answers"
+EXCERPT_CHARS = 2000
+
+
+def default_answer_files(answers_dir: str | Path | None = None) -> list[Path]:
+    """Every run file in evals/answers/, without judged outputs."""
+    root = Path(answers_dir) if answers_dir is not None else ANSWERS_DIR
+    return sorted(p for p in root.glob("*.jsonl") if not p.name.endswith(".judged.jsonl"))
+
+
+def normalize_row(row: dict[str, Any], run_id: str) -> dict[str, Any]:
+    """Flatten a run_all row (nested answer, blocks) to the flat sheet row."""
+    out = dict(row)
+    out.setdefault("run_id", run_id)
+    if isinstance(out.get("answer"), dict):
+        out["answer"] = out["answer"].get("answer", "")
+    if "retrieved_text_excerpt" not in out and out.get("blocks"):
+        text = "\n\n".join(f"[{b.get('ref')}] {b.get('text', '')}" for b in out["blocks"])
+        out["retrieved_text_excerpt"] = text[:EXCERPT_CHARS]
+    return out
+
+
+def _load_answers(answers_path: str | Path | list[str | Path]) -> list[dict[str, Any]]:
+    paths = answers_path if isinstance(answers_path, list) else [answers_path]
     rows = []
-    with Path(answers_path).open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                rows.append(json.loads(line))
+    for path in paths:
+        path = Path(path)
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    rows.append(normalize_row(json.loads(line), path.stem))
     return rows
 
 
@@ -58,7 +89,7 @@ def _write_sheet_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def export_sheet(
-    answers_path: str | Path,
+    answers_path: "str | Path | list[str | Path] | None",
     n: int = 40,
     seed: int = 0,
     holdout: int = 0,
@@ -70,6 +101,10 @@ def export_sheet(
     evals/calibration/holdout.csv instead, so they never enter the tuning set.
     Returns {"sheet": path} or {"sheet": path, "holdout": path}.
     """
+    if answers_path is None:
+        answers_path = default_answer_files()
+        if not answers_path:
+            raise FileNotFoundError(f"no answer files in {ANSWERS_DIR}")
     rows = _load_answers(answers_path)
     groups: dict[tuple[Any, Any], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
@@ -172,14 +207,19 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_export = sub.add_parser("export", help="export a stratified labeling sheet")
-    p_export.add_argument("answers_path")
+    p_export.add_argument("answers_path", nargs="?", default=None, help="default: every evals/answers/*.jsonl")
     p_export.add_argument("--n", type=int, default=40)
     p_export.add_argument("--seed", type=int, default=0)
     p_export.add_argument("--holdout", type=int, default=0)
+    p_export.add_argument("--answers-dir", default=None, help="folder of run files when no path is given")
+    p_export.add_argument("--out-dir", default=None, help="default: evals/calibration")
 
     args = parser.parse_args(argv)
     if args.command == "export":
-        result = export_sheet(args.answers_path, n=args.n, seed=args.seed, holdout=args.holdout)
+        source = args.answers_path
+        if source is None and args.answers_dir is not None:
+            source = default_answer_files(args.answers_dir)
+        result = export_sheet(source, n=args.n, seed=args.seed, holdout=args.holdout, out_dir=args.out_dir)
         for key, path in result.items():
             print(f"{key}: {path}")
         return 0

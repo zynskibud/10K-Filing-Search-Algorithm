@@ -1,24 +1,16 @@
 """Final optimized RAG (wave 8a): standalone, no framework, <=300 lines.
 
-Pipeline: BM25/vector search on one chunk table -> RRF fusion (hybrid) ->
-cross-encoder rerank -> small-to-big context (20k-token budget) -> Qwen3
-prompt with citations -> citation check. CONFIG holds the winning choices
-from waves 5-7 (defaults: hybrid, bge-small s3, cross-encoder, thinking
-off); `runs/wave-{5,6,7}/winners.json` overrides them when present. Company
-routing is out of scope here: pass --company CIKs to filter, or none for
-every filing. Imports only psycopg, httpx, sentence_transformers (its
-tokenizer also covers "the tokenizer"), and citation_rag.settings.
+Pipeline: BM25/vector search -> RRF fusion -> rerank (monoT5 or cross-encoder)
+-> small-to-big context (20k-token budget) -> Qwen3 prompt with citations ->
+citation check. CONFIG holds the choices; `runs/wave-{5,6,7}/winners.json`
+override it (wave 5: index, search; wave 6: reranker; wave 7: thinking).
+Routing is out of scope: pass --company CIKs, or none for every filing.
+Imports only psycopg, httpx, transformers, sentence_transformers, citation_rag.settings.
 """
 
 from __future__ import annotations
 
-import argparse
-import json
-import math
-import os
-import pickle
-import re
-import sys
+import argparse, json, math, os, pickle, re, sys  # noqa: E401
 from pathlib import Path
 
 import httpx
@@ -29,18 +21,17 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CONFIG = {
     "index": "bge_small__s3",       # chunk table is chunks_{index}
     "search": "hybrid",             # "bm25" | "vector" | "hybrid"
-    "reranker": "cross_encoder",    # "cross_encoder" | "none"
+    "reranker": "cross_encoder",    # "cross_encoder" | "monot5" | "none"
     "thinking": False,
     "table_option": "labels_only",  # informational: baked in at index time
 }
-for _wave in ("wave-5", "wave-6", "wave-7"):
+for _wave in ("wave-5", "wave-6", "wave-7"):  # each wave's winners.json overrides CONFIG
     _p = PROJECT_ROOT / "runs" / _wave / "winners.json"
-    if _p.exists():
-        CONFIG.update(json.loads(_p.read_text(encoding="utf-8")))
+    CONFIG.update(json.loads(_p.read_text(encoding="utf-8")) if _p.exists() else {})
 K, TOP, RRF_K = 50, 8, 60
 CONTEXT_BUDGET = 20_000
 EMBED_MODEL = "BAAI/bge-small-en-v1.5"
-RERANK_MODEL = "BAAI/bge-reranker-v2-m3"
+RERANK_MODEL, MONOT5_MODEL = "BAAI/bge-reranker-v2-m3", "castorini/monot5-base-msmarco-10k"
 QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 
 ANSWER_PROMPT = """You are answering a question about SEC 10-K filings, using only the numbered blocks of filing text below.
@@ -67,7 +58,7 @@ os.environ.setdefault("HF_HUB_OFFLINE", "1")
 from sentence_transformers import CrossEncoder, SentenceTransformer  # noqa: E402
 
 # -- lazy singletons: one Postgres connection, one embedder, one reranker --
-_conn = _embedder = _reranker = None
+_conn = _embedder = _reranker = _monot5 = None
 def _get_conn(schema: str | None = None) -> psycopg.Connection:
     global _conn
     if _conn is None:
@@ -84,6 +75,26 @@ def _get_reranker() -> CrossEncoder:
     global _reranker
     _reranker = _reranker or CrossEncoder(RERANK_MODEL, device="cpu", max_length=1024, cache_folder=SETTINGS.hf_home)
     return _reranker
+def _monot5_scores(question: str, texts: list[str]) -> list[float]:
+    """monoT5: P("true") at the first decoding step of `Query: .. Document: .. Relevant:`."""
+    global _monot5
+    import torch
+    from transformers import T5ForConditionalGeneration, T5Tokenizer
+    if _monot5 is None:
+        kw = {"cache_dir": SETTINGS.hf_home}
+        _monot5 = (T5Tokenizer.from_pretrained(MONOT5_MODEL, **kw),
+                   T5ForConditionalGeneration.from_pretrained(MONOT5_MODEL, **kw).eval())
+    tok, model = _monot5
+    ids = [tok.encode(w, add_special_tokens=False)[0] for w in ("true", "false")]
+    scores: list[float] = []
+    for i in range(0, len(texts), 8):
+        enc = tok([f"Query: {question} Document: {t} Relevant:" for t in texts[i:i + 8]],
+                  return_tensors="pt", padding=True, truncation=True, max_length=512)
+        start = torch.full((enc["input_ids"].shape[0], 1), model.config.decoder_start_token_id, dtype=torch.long)
+        with torch.no_grad():
+            logits = model(**enc, decoder_input_ids=start).logits[:, -1, :]
+        scores += torch.softmax(logits[:, ids], dim=-1)[:, 0].tolist()
+    return scores
 def count_tokens(text: str) -> int:
     """Token count under the bge-small tokenizer (the project's token ruler)."""
     return len(_get_embedder().tokenizer(text, add_special_tokens=False)["input_ids"]) if text else 0
@@ -92,8 +103,7 @@ def count_tokens(text: str) -> int:
 # instance; find_class redirects that class to a bare placeholder so loading
 # it never imports citation_rag. Scoring is reimplemented below (k1=1.5,
 # b=0.75 Okapi BM25, over the loaded pickle's plain postings/doc_freq/etc.)
-class _PlainBM25:
-    pass
+class _PlainBM25: pass  # noqa: E701
 class _BM25Unpickler(pickle.Unpickler):
     def find_class(self, module: str, name: str):
         is_bm25 = module.startswith("citation_rag") and name == "BM25Index"
@@ -156,19 +166,16 @@ def retrieve(conn, table: str, bm25_idx: "_PlainBM25 | None", question: str, cik
     if CONFIG["search"] in ("vector", "hybrid"):
         qvec = _get_embedder().encode(QUERY_PREFIX + question, normalize_embeddings=True)
         vec_hits = _vector_search(conn, table, qvec, K, ciks)
-    if CONFIG["search"] == "bm25":
-        ranked = [d for d, _ in bm25_hits]
-    elif CONFIG["search"] == "vector":
-        ranked = [d for d, _ in vec_hits]
-    else:
-        ranked = [d for d, _ in rrf([bm25_hits, vec_hits])]
+    single = {"bm25": bm25_hits, "vector": vec_hits}.get(CONFIG["search"])
+    ranked = [d for d, _ in (rrf([bm25_hits, vec_hits]) if single is None else single)]
     cols = ["id", "text", "token_count", "section_id", "table_id", "page_start", "page_end", "accession_no", "cik"]
     q = f"SELECT {', '.join(cols)} FROM {table} WHERE id = ANY(%s)"
     rows = {r[0]: dict(zip(cols, r)) for r in conn.execute(q, (ranked,)).fetchall()} if ranked else {}
     ranked = [d for d in ranked if d in rows]
-    if CONFIG["reranker"] == "cross_encoder" and ranked:
-        pairs = [[question, rows[d]["text"]] for d in ranked]
-        scores = _get_reranker().predict(pairs, batch_size=16, show_progress_bar=False)
+    if CONFIG["reranker"] in ("cross_encoder", "monot5") and ranked:
+        texts = [rows[d]["text"] for d in ranked]
+        scores = (_monot5_scores(question, texts) if CONFIG["reranker"] == "monot5" else
+                  _get_reranker().predict([[question, t] for t in texts], batch_size=16, show_progress_bar=False))
         ranked = [d for _, d in sorted(zip(scores, ranked), key=lambda p: p[0], reverse=True)]
     return [rows[d] for d in ranked[:TOP]]
 
@@ -214,14 +221,9 @@ def build_context(conn, results: list[dict]) -> list[dict]:
                 break
             text = text[: max(remaining, 200) * 4] + "\n[...]"
             tok = count_tokens(text)
-        blocks.append({
-            "ref": ref, "text": text, "accession_no": sec["accession_no"],
-            "company": sec["company"], "fiscal_year": sec["fiscal_year"],
-            "item": sec["item"], "section_title": sec["title"],
-            "page_start": sec["page_start"], "page_end": sec["page_end"],
-        })
-        total += tok
-        ref += 1
+        blocks.append({"ref": ref, "text": text, "section_title": sec["title"], **{
+            k: sec[k] for k in ("accession_no", "company", "fiscal_year", "item", "page_start", "page_end")}})
+        total, ref = total + tok, ref + 1
     return blocks
 
 # -- prompt, LLM call, parsing ---------------------------------------------
@@ -238,14 +240,11 @@ def parse_response(raw: str) -> dict:
     except (json.JSONDecodeError, ValueError):
         return {"answer": raw, "citations": [], "answerable": False}
     data.setdefault("answerable", True)
-    if not isinstance(data.get("citations"), list):
-        data["citations"] = []
+    data["citations"] = data["citations"] if isinstance(data.get("citations"), list) else []
     return data
 def call_llm(prompt: str, base_url: str) -> str:
-    payload = {
-        "model": "qwen3:8b", "prompt": prompt, "stream": False, "format": "json",
-        "options": {"temperature": 0.0, "num_ctx": 32768}, "think": CONFIG["thinking"],
-    }
+    payload = {"model": "qwen3:8b", "prompt": prompt, "stream": False, "format": "json",
+               "options": {"temperature": 0.0, "num_ctx": 32768}, "think": CONFIG["thinking"]}
     resp = httpx.post(f"{base_url}/api/generate", json=payload, timeout=900.0)
     resp.raise_for_status()
     return resp.json()["response"]
@@ -268,10 +267,8 @@ def check_citations(answer: str, citations: list[dict], answerable: bool, blocks
     unquoted = sorted(m for m in markers if m not in cited)
     refused_with_citations = (not answerable) and bool(citations)
     valid = not (invalid or bad_quote or unquoted or refused_with_citations)
-    return {
-        "valid": valid, "invalid_refs": invalid, "quotes_not_found": bad_quote,
-        "unquoted_markers": unquoted, "refused_with_citations": refused_with_citations,
-    }
+    return {"valid": valid, "invalid_refs": invalid, "quotes_not_found": bad_quote,
+            "unquoted_markers": unquoted, "refused_with_citations": refused_with_citations}
 
 def answer_question(question: str, companies: list[str] | None = None, *, schema: str | None = None, llm=None) -> dict:
     conn = _get_conn(schema)

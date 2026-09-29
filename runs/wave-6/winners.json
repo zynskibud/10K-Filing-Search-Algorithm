@@ -1,0 +1,9 @@
+{
+  "reranker": "monot5",
+  "provisional": true,
+  "source": "reports/wave-6.md",
+  "note": "Best CPU reranker on bge_small__s2 hybrid: recall@8 0.831 [0.75, 0.90], MRR 0.558. Final only if wave 7 shows the answer gain holds on the GPU; otherwise none.",
+  "recall": 0.831,
+  "recall_ci95": [0.75, 0.90],
+  "mrr": 0.558
+}
