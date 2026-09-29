@@ -54,3 +54,6 @@ Every embedded table has 0 null vectors. `filings`, `sections`, `tables_parsed` 
 - The table chunker produced 6.7% of table chunks over 512 tokens (one row across dozens of columns; malformed 1,000-token headers). Fixed: rows split at cell separators with the label repeated, headers capped. Max table chunk now 422 tokens.
 - bge_m3__s3 took about 6 h, not the 3.7 h of s1: its shards hold longer chunks.
 - bge_m3__s4 dropped mid-wave by the coordinator (see OPEN-QUESTIONS.md); rebuildable with `scripts/run.sh 4s4`.
+
+## Wave 4w: winner over the full corpus (2026-09-29)
+bge_small__s2 over all 1,333 parsed filings (1,194 passing): 607,098 chunks, 122 shards, 7,252 s of GPU embedding (about 2 h), 0 null vectors, HNSW and BM25 rebuilt. Started 16:32Z, ended 19:27Z, exit 0.
