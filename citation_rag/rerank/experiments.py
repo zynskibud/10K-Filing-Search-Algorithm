@@ -19,6 +19,7 @@ callable around a separately-configured retriever.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -78,6 +79,7 @@ def run_rerank_experiment(
     search: str,
     results_dir: "str | Path | None" = None,
     reranker_kwargs: "dict[str, dict[str, Any]] | None" = None,
+    names: "list[str] | None" = None,
 ) -> list[dict[str, Any]]:
     """Runs the six rerankers on the dev split with oracle routing, through
     `citation_rag.evals.runner.run_eval`. Not exercised by this wave's tests
@@ -90,8 +92,13 @@ def run_rerank_experiment(
 
     reranker_kwargs = reranker_kwargs or {}
     rows: list[dict[str, Any]] = []
-    for name in RERANKER_NAMES:
-        reranker = build_reranker(name, **reranker_kwargs.get(name, {}))
+    for name in (names or RERANKER_NAMES):
+        try:
+            reranker = build_reranker(name, **reranker_kwargs.get(name, {}))
+        except Exception as exc:  # a missing model or daemon must not stop the other arms
+            print(f"[rerank] {name}: skipped, {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+            rows.append({"reranker": name, "run_id": None, "error": f"{type(exc).__name__}: {exc}"})
+            continue
         retriever = Retriever(
             index_name=index,
             method=search,
@@ -101,10 +108,16 @@ def run_rerank_experiment(
             general_cap=TOP_K,
             reranker=reranker,
         )
-        config = {"index": index, "search": search, "reranker": name, "k": TOP_K, "top": TOP_K}
+        config = {"index": index, "search": search, "reranker": name, "k": CANDIDATE_K, "top": TOP_K}
         t0 = time.perf_counter()
-        record = run_eval(config, "dev", retriever, results_dir=results_dir)
+        try:
+            record = run_eval(config, "dev", retriever, results_dir=results_dir)
+        except Exception as exc:
+            print(f"[rerank] {name}: failed, {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+            rows.append({"reranker": name, "run_id": None, "error": f"{type(exc).__name__}: {exc}"})
+            continue
         wall_s = time.perf_counter() - t0
+        print(f"[rerank] {name}: done in {wall_s:.0f}s", file=sys.stderr, flush=True)
         rows.append(
             {
                 "reranker": name,
@@ -120,8 +133,12 @@ def run_rerank_experiment(
 def print_comparison(rows: list[dict[str, Any]], results_dir: "str | Path | None" = None) -> None:
     from citation_rag.evals.report import RESULTS_DIR, compare
 
-    run_ids = [r["run_id"] for r in rows]
-    print(compare(run_ids, results_dir=results_dir or RESULTS_DIR))
+    run_ids = [r["run_id"] for r in rows if r.get("run_id")]
+    table = compare(run_ids, results_dir=results_dir or RESULTS_DIR)
+    print(table)
+    out_dir = Path("runs/wave-6"); out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "rerank.md").write_text(table + "\n\nErrors: " + json.dumps([r for r in rows if r.get("error")]) + "\n", encoding="utf-8")
+    (out_dir / "rows.json").write_text(json.dumps(rows, indent=2, default=str), encoding="utf-8")
 
 
 def main(argv: "list[str] | None" = None) -> int:
@@ -130,13 +147,15 @@ def main(argv: "list[str] | None" = None) -> int:
     parser.add_argument("--index", required=True)
     parser.add_argument("--search", required=True)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--rerankers", default=None, help="comma-separated subset of " + ",".join(RERANKER_NAMES))
     args = parser.parse_args(argv)
+    names = [x.strip() for x in args.rerankers.split(",") if x.strip()] if args.rerankers else None
 
     if args.dry_run:
         print_dry_run(args.index, args.search)
         return 0
 
-    rows = run_rerank_experiment(args.index, args.search)
+    rows = run_rerank_experiment(args.index, args.search, names=names)
     print_comparison(rows)
     return 0
 
