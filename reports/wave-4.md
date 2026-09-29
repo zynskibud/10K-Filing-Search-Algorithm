@@ -1,4 +1,4 @@
-# Wave 4 report: chunking, storage, embedding (in progress)
+# Wave 4 report: chunking, storage, embedding
 
 ## Chunking (full corpus, 1,194 passing filings)
 | Index | Chunks | Tokens |
@@ -33,3 +33,24 @@ The 7-index comparison cannot run on the full corpus (about 150 GPU hours). It r
 ## Incidents
 - First run (14:48) lost 2.5 h to a battery sleep, then swapped: the ETA step loaded 1.7 GB chunk files into memory. Fixed by streaming reads (commit 650e0c3).
 - Second run re-chunked everything; fixed by reusing existing chunk files and linking identical s1 to s3 files across models.
+
+## Result (2026-09-28, subset build)
+
+Subset: 150 passing filings (47 golden-referenced + seeded random fill), `data/subset.txt`. Chunk files in `data/chunks_subset/`, vectors in `data/vectors_subset/`, Postgres tables `chunks_{index}`, BM25 pickles in `data/bm25/`.
+
+| Index | Chunks | Embedding wall time (MPS) | HNSW | BM25 |
+|---|---|---|---|---|
+| bge_small__s1 | 65,610 | minutes | yes | yes |
+| bge_small__s2 | 74,511 | minutes | yes | yes |
+| bge_small__s3 | 82,111 | minutes | yes | yes |
+| bge_m3__s1 | 62,921 | 3.7 h | yes | yes |
+| bge_m3__s3 | 82,111 | about 6 h | yes | yes |
+| bge_m3__s4 | 64,300 (loaded, no vectors) | dropped by the coordinator (7.6 h) | no | no |
+
+Every embedded table has 0 null vectors. `filings`, `sections`, `tables_parsed` hold the full 1,333-filing parse (1,194 passing) for small-to-big context and for the later full-corpus winner build.
+
+## Incidents (continued)
+- Third and fourth restarts failed in the Postgres load on NOT NULL constraints the fixtures never exercised (table title, filer ticker). Fixed by relaxing the descriptive columns and by dry-running the full load on the real subset before taking the lock again.
+- The table chunker produced 6.7% of table chunks over 512 tokens (one row across dozens of columns; malformed 1,000-token headers). Fixed: rows split at cell separators with the label repeated, headers capped. Max table chunk now 422 tokens.
+- bge_m3__s3 took about 6 h, not the 3.7 h of s1: its shards hold longer chunks.
+- bge_m3__s4 dropped mid-wave by the coordinator (see OPEN-QUESTIONS.md); rebuildable with `scripts/run.sh 4s4`.
