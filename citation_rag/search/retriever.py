@@ -34,6 +34,22 @@ from typing import Any, Callable, NamedTuple, Sequence
 from citation_rag.search import fusion, vector
 from citation_rag.search.bm25 import BM25Index
 from citation_rag.search.query_embed import embed_query as _default_embed_query
+
+_QUERY_EMBEDDERS: dict[str, object] = {}
+
+
+def _embedder_for_index(index_name: str):
+    """Query-embedding function for the model an index was built with (CPU)."""
+    model_name = index_name.split("__", 1)[0]
+    if model_name == "bge_small":
+        return _default_embed_query
+    if model_name not in _QUERY_EMBEDDERS:
+        from citation_rag.index.models import load_embedder
+
+        _QUERY_EMBEDDERS[model_name] = load_embedder(model_name, device="cpu")
+    emb = _QUERY_EMBEDDERS[model_name]
+    return lambda text: [float(x) for x in emb.encode_query(text)]
+
 from citation_rag.search.router import Router
 
 VALID_METHODS = {"bm25", "vector", "hybrid"}
@@ -83,7 +99,9 @@ class Retriever:
         return self.bm25_index
 
     def _embed_query(self, question: str) -> list[float]:
-        fn = self.embed_query_fn or _default_embed_query
+        # The query must be embedded with the same model as the index. Without
+        # an explicit fn, pick the model from the index name (bge_small or bge_m3).
+        fn = self.embed_query_fn or _embedder_for_index(self.index_name)
         return fn(question)
 
     # -- one filtered search (bm25 and/or vector, fused if hybrid) ----------
@@ -179,17 +197,19 @@ class Retriever:
 
     # -- per-company and general searches ------------------------------------
 
-    def _search_company(self, question: str, cik: str) -> list[ScoredResult]:
+    def _search_company(self, question: str, cik: str, budget: int | None = None) -> list[ScoredResult]:
+        # One named company gets the full `top`; several share `per_company_top` each.
+        budget = self.per_company_top if budget is None else budget
         ranked_ids, scores_map = self._ranked_with_scores(question, ciks=[cik])
         rerank_scores: dict[object, float | None] = {}
 
         if self.reranker is not None and ranked_ids:
             rows_all = vector.fetch_rows(self.index_name, ranked_ids, schema=self.schema, pool=self.pool)
             ranked_ids, rerank_scores = self._rerank_order(question, ranked_ids, rows_all, scores_map)
-            top_ids = ranked_ids[: self.per_company_top]
+            top_ids = ranked_ids[:budget]
             rows = {doc_id: rows_all[doc_id] for doc_id in top_ids if doc_id in rows_all}
         else:
-            top_ids = ranked_ids[: self.per_company_top]
+            top_ids = ranked_ids[:budget]
             rows = vector.fetch_rows(self.index_name, top_ids, schema=self.schema, pool=self.pool)
 
         return self._to_results(top_ids, rows, scores_map, rerank_scores)
@@ -231,6 +251,7 @@ class Retriever:
             return self._search_general(question)
 
         results: list[ScoredResult] = []
+        budget = self.top if len(companies) == 1 else self.per_company_top
         for cik in companies:
-            results.extend(self._search_company(question, cik))
+            results.extend(self._search_company(question, cik, budget))
         return results

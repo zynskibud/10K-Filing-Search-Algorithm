@@ -27,7 +27,7 @@ from citation_rag.search import vector
 from citation_rag.search.query_embed import embed_query
 from citation_rag.search.retriever import Retriever
 
-INDEXES = [
+ALL_INDEXES = [
     "bge_small__s1",
     "bge_small__s2",
     "bge_small__s3",
@@ -36,6 +36,28 @@ INDEXES = [
     "bge_m3__s3",
     "bge_m3__s4",
 ]
+
+
+def available_indexes() -> list[str]:
+    """Indexes whose chunk table exists and has no null embeddings."""
+    import psycopg
+
+    from citation_rag.settings import Settings
+
+    out = []
+    with psycopg.connect(Settings().database_url) as conn, conn.cursor() as cur:
+        for name in ALL_INDEXES:
+            cur.execute("SELECT to_regclass(%s)", (f"chunks_{name}",))
+            if cur.fetchone()[0] is None:
+                continue
+            cur.execute(f"SELECT count(*) FILTER (WHERE embedding IS NULL), count(*) FROM chunks_{name}")
+            nulls, total = cur.fetchone()
+            if total and nulls == 0:
+                out.append(name)
+    return out
+
+
+INDEXES = list(ALL_INDEXES)  # narrowed to available_indexes() at run time
 METHODS = ["bm25", "vector", "hybrid"]
 EF_SEARCH_VALUES = (40, 100, 200)
 
@@ -145,33 +167,82 @@ def _print_dry_run_hnsw(index_name: str) -> None:
         print(f"  ef_search={ef}: exact top-50 vs HNSW top-50 recall + latency")
 
 
+def _write_winners(run_ids: list[str], results_dir: Path | str | None = None) -> dict:
+    """Pick the winner by recall@8 (tie: MRR) and write runs/wave-5/winners.json
+    plus a markdown table of every run."""
+    import json
+
+    from citation_rag.evals.report import RESULTS_DIR, compare
+
+    rdir = Path(results_dir) if results_dir else RESULTS_DIR
+    rows = []
+    with open(rdir / "runs.jsonl", encoding="utf-8") as fh:
+        for line in fh:
+            if line.strip():
+                rows.append(json.loads(line))
+    by_id = {r["run_id"]: r for r in rows}
+    runs = [by_id[i] for i in run_ids if i in by_id]
+
+    def key(r):
+        m = r["metrics"]
+        return (m.get("recall@8", {}).get("value", 0), m.get("mrr", {}).get("value", 0))
+
+    best = max(runs, key=key)
+    winners = {"index": best["config"]["index"], "search": best["config"]["search"],
+               "run_id": best["run_id"], "recall@8": best["metrics"]["recall@8"]["value"],
+               "mrr": best["metrics"]["mrr"]["value"], "n_questions": best["n_questions"]}
+    out_dir = Path("runs/wave-5"); out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "winners.json").write_text(json.dumps(winners, indent=2), encoding="utf-8")
+    table = compare(run_ids, rdir)
+    (out_dir / "experiment_A.md").write_text(table, encoding="utf-8")
+    print(table)
+    print(f"winner: {winners}")
+    return winners
+
+
 def main(argv: list[str] | None = None) -> int:
+    global INDEXES
     parser = argparse.ArgumentParser(prog="citation_rag.search.experiments")
     parser.add_argument("--exp", required=True, choices=["A", "hnsw"])
-    parser.add_argument("--index", default=INDEXES[0], help="index name for --exp hnsw")
+    parser.add_argument("--index", default=None, help="index name for --exp hnsw (default: the experiment A winner, else the first available)")
+    parser.add_argument("--indexes", default=None, help="comma-separated index names (default: every index with vectors)")
     parser.add_argument("--split", default="dev")
     parser.add_argument("--k", type=int, default=50)
     parser.add_argument("--top", type=int, default=8)
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="print the run matrix and exit; wave 5a allows only this mode",
-    )
+    parser.add_argument("--dry-run", action="store_true", help="print the run matrix and exit")
     args = parser.parse_args(argv)
 
-    if not args.dry_run:
-        print(
-            "refusing: wave 5a only runs experiments.py with --dry-run (no corpus-scale runs yet)",
-            file=sys.stderr,
-        )
-        return 1
+    if args.indexes:
+        INDEXES = [x.strip() for x in args.indexes.split(",") if x.strip()]
+    elif not args.dry_run:
+        INDEXES = available_indexes()
+        print(f"available indexes: {INDEXES}")
+
+    if args.dry_run:
+        if args.exp == "A":
+            _print_dry_run_matrix_a()
+        else:
+            _print_dry_run_hnsw(args.index or INDEXES[0])
+        return 0
 
     if args.exp == "A":
-        _print_dry_run_matrix_a()
-    else:
-        _print_dry_run_hnsw(args.index)
+        run_ids = run_experiment_a(split=args.split, k=args.k, top=args.top)
+        _write_winners(run_ids)
+        return 0
+
+    import json
+
+    index_name = args.index
+    if index_name is None:
+        wpath = Path("runs/wave-5/winners.json")
+        index_name = json.loads(wpath.read_text())["index"] if wpath.exists() else INDEXES[0]
+    results = run_experiment_hnsw(index_name, split=args.split, k=args.k)
+    out_dir = Path("runs/wave-5"); out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "hnsw_check.json").write_text(json.dumps({"index": index_name, "results": results}, indent=2), encoding="utf-8")
+    for r in results:
+        print(f"index={index_name} ef_search={r['ef_search']} recall_vs_exact={r['recall']:.3f} latency_ms_p50={r['latency_ms_p50']:.1f} n={r['n_questions']}")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())
