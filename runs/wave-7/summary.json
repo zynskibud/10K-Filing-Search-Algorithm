@@ -1,0 +1,30 @@
+[
+  {
+    "run_name": "A_think",
+    "n_questions": 96,
+    "answered": 3,
+    "refused": 93,
+    "citation_valid_share": null
+  },
+  {
+    "run_name": "A_nothink",
+    "n_questions": 96,
+    "answered": 3,
+    "refused": 93,
+    "citation_valid_share": null
+  },
+  {
+    "run_name": "B_think",
+    "n_questions": 96,
+    "answered": 80,
+    "refused": 16,
+    "citation_valid_share": 0.71875
+  },
+  {
+    "run_name": "B_nothink",
+    "n_questions": 96,
+    "answered": 81,
+    "refused": 15,
+    "citation_valid_share": 0.78125
+  }
+]

@@ -1,0 +1,273 @@
+id,question,reference,answer,retrieved_text_excerpt,human_label
+g0090,"For Ampco-Pittsburgh's fiscal 2025 10-K: (a) what are the corporation's two reportable business segments, and (b) what was the charge or credit for asbestos-related costs in 2025 versus 2024?","(a) Forged and Cast Engineered Products (FCEP) and Air and Liquid Processing (ALP). (b) A charge of $12,352 thousand in 2025 versus a credit of $(4,184) thousand in 2024.","The corporation's two reportable business segments are (a) FCEP and ALP [3]. The charge for asbestos-related costs in 2025 was $12,352, and the credit in 2024 was $(4,184) [1].","[1] Charge (credit) for asbestos-related costs equaled $12,352 and $(4,184) for 2025 and 2024, respectively.
+
+The charge for 2025 represents:
+
+•An increase in the estimated settlement costs of pending and future asbestos claims, net of additional insurance recoveries, of $14,525 primarily as a result of recent experience; offset by
+
+•A reduction in the estimated defense-to-indemnity cost ratio from 55% to 50%, based on ongoing experience and improvements in defense costs that are expected to continue, which reduced estimated costs by approximately $2,173.
+
+The credit for 2024 represents the net of:
+
+•A decrease in the estimated settlement costs of pending and future asbestos claims, net of additional insurance recoveries, of $366 primarily as a result of recent experience;
+
+•A reduction in the estimated defense-to-indemnity cost ratio from 60% to 55%, based on ongoing experience and improvements in defense costs that are expected to continue, which reduced estimated costs by approximately $3,735; and
+
+•Asbestos-Related Proceeds of $83.
+
+[2] (3)Corporate represents the operating expense of the corporate office and other costs not allocated to the various segments.
+
+LIQUIDITY AND CAPITAL RESOURCES
+
+[Table: t009]
+
+Net cash flows provided by operating activities equaled $1,344 and $18,028 for 2025 and 2024, respectively, with the decrease primarily due to a change in customer-related liabilities (principally customer deposits) of approximately $14,160. In addition, net cash flows provided by operating activities for the prior year benefited from the reimbursement of asbestos-related costs of approximately $1,756 from a previously unsettled insurance carrier. See Note 20, Litigation, to the Consolidated Financial Statements.
+
+Trade receivables at December 31, 2025 increased by approximately $8,900 when compared to trade receivables at December 31, 2024 primarily due to:
+
+•Higher sales in November and December of 2025 versus November and December of 2024, which increased ",
+g0062,What patient population is IN8BIO's product candidate INB-100 intended to treat?,Patients with hematological malignancies who have undergone allogeneic HSCT,INB-100 is intended to treat adult patients with high-risk leukemias undergoing haploidentical stem cell transplantation (HSCT) [1].,"[1] Our Product Candidates
+
+INB-100 for the Treatment of Patients with Hematological Malignancies Undergoing HSCT
+
+INB-100 is an allogeneic DeltEx product candidate created from healthy donors, consisting of expanded activated gamma-delta T cells, with the goal of testing the safety of allogeneic gamma-delta T cells to boost gamma-delta T cell levels and improve overall survival in patients with hematological malignancies who have undergone allogeneic HSCT. We believe that supplementing the patient’s immune system with allogeneic gamma-delta T cells will lead to reduced incidence of relapse and improved survival in these patients as we are now achieving persistent blood levels of gamma-delta T cells that have previously been demonstrated to be associated with higher rates of overall survival.
+
+[2] Overview
+
+We are a leading clinical-stage biopharmaceutical company focused on the discovery, development and commercialization of gamma-delta T cell product candidates and T cell engagers (""TCEs"") for cancer and autoimmune diseases. We are the most clinically advanced gamma-delta T cell-focused company and are utilizing our suite of DeltEx platform technologies as we aspire to eliminate cancer cells to achieve our mission of what we refer to as Cancer ZeroTM — the safe elimination of all cancer cells in every patient battling the disease. We develop ex vivo expanded and activated gamma-delta T cell candidates and TCEs based upon our deep expertise in gamma-delta T cell biology, proprietary genetic engineering, and cell-type specific manufacturing capabilities, which we refer to collectively as our DeltEx platform. Our platform employs allogeneic, autologous, induced pluripotent stem cell (""iPSC""), genetically modified cell therapy approaches, and TCEs that are designed to effectively identify and eradicate tumor or target cells. To date, we have conducted two primary investigator-sponsored Phase 1 clinical trials evaluating our gamma-delta T cell technologies in cancer pa",
+g0056,"Has this biotech ever booked revenue from selling a treatment, and has it been losing money since it started, per its own filing?","No, it has not generated product sales, and it has had operating losses since inception",I do not know.,,
+g0068,"Among a bio-based materials company, an oncology-focused biopharmaceutical company, and a medical device company treating pediatric abdominal pain, which reported the most full-time or total employees as of December 31, 2025?","The oncology-focused biopharmaceutical company (Day One Biopharmaceuticals), with 178 full-time employees, versus about 98 for the materials company and 24 for the device company.","The bio-based materials company reported the most full-time or total employees as of December 31, 2025, with 92 employees [5].","[1] Employees
+
+As of December 31, 2025, we had six (6) full-time employees. We believe our relations with our employees are good. In addition, we utilize and will continue to utilize consultants, clinical research organizations and third parties to perform our pre-clinical studies, clinical studies, manufacturing and regulatory functions.
+
+[2] Employees
+
+We had 81 and 39 full-time employees as of December 31, 2025 and 2024, respectively, the increase in which is principally attributable to the acquisition of Irwin. In addition, the Company utilizes consultants and temporary or part-time employees for certain services on an as-needed basis. We consider our employee relations to be good.
+
+[3] Employees
+
+As of December 31, 2025, we had 114 full-time employees, which consisted of three executive officers, three vice presidents, 44 sales and marketing staff, 29 people engaged in manufacturing of lasers, 16 customer-field service personnel, two engaged in research and development and 17 finance and administration staff.
+
+[4] Human Capital
+
+As of December 31, 2025, we employed 10 full-time employees. Of these full-time employees, eight are engaged in clinical advancement and research and development activities. In addition, we have contracts with CROs, CMOs and consultants to provide chemistry, toxicology, preclinical, clinical, and regulatory work on our programs, including in both preclinical and clinical studies for our product candidates.
+
+[5] Employees
+
+As of December 31, 2025, the Company had a total of 92 employees comprised of 75 employees (72 full-time and three part-time) in the United Sates and 19 employees located in Germany (12 full-time and seven part-time).
+
+[6] Employees
+
+As of December 31, 2025, we had 75 full-time equivalent (“FTE”) personnel compared to 85 as of December 31, 2024, reflecting the need to prioritize the cash utilization in our commercial and production activities. We continually assess employee turnover, recruitment initiatives, compensati",
+g0027,"What was Marqeta's net revenue for the year ended December 31, 2025, in thousands?","$624,884 thousand (about $624.9 million).","Marqeta's net revenue for the year ended December 31, 2025 was $624,884 thousand, as stated in the filings [1].","[1] Results of Operations
+
+The following table sets forth our results of operations for the periods presented:
+
+[Table: t004]
+The following table sets forth our results of operations for the periods presented:
+Net revenue | Year Ended December 31,: Net revenue | Year Ended December 31,: Net revenue | Year Ended December 31, 2025: $624,884 | Year Ended December 31, 2025: $506,995 | Year Ended December 31, 2025: $676,171
+Costs of revenue | Year Ended December 31,: Costs of revenue | Year Ended December 31,: Costs of revenue | Year Ended December 31, 2025: 187,612 | Year Ended December 31, 2025: 187,612 | Year Ended December 31, 2025: 155,146 | Year Ended December 31, 2024: 155,146 | Year Ended December 31, 2024: 346,657 | Year Ended December 31, 2024: 346,657
+Gross profit | Year Ended December 31,: Gross profit | Year Ended December 31,: Gross profit | Year Ended December 31, 2025: 437,272 | Year Ended December 31, 2025: 437,272 | Year Ended December 31, 2025: 351,849 | Year Ended December 31, 2024: 351,849 | Year Ended December 31, 2024: 329,514 | Year Ended December 31, 2024: 329,514
+Operating expenses (benefit): | Year Ended December 31,: Operating expenses (benefit): | Year Ended December 31,: Operating expenses (benefit):
+Compensation and benefits | Year Ended December 31,: Compensation and benefits | Year Ended December 31,: Compensation and benefits | Year Ended December 31, 2025: 340,419 | Year Ended December 31, 2025: 340,419 | Year Ended December 31, 2025: 397,595 | Year Ended December 31, 2024: 397,595 | Year Ended December 31, 2024: 446,381 | Year Ended December 31, 2024: 446,381
+Technology | Year Ended December 31,: Technology | Year Ended December 31,: Technology | Year Ended December 31, 2025: 65,005 | Year Ended December 31, 2025: 65,005 | Year Ended December 31, 2025: 60,059 | Year Ended December 31, 2024: 60,059 | Year Ended December 31, 2024: 55,612 | Year Ended December 31, 2024: 55,612
+Professional services | Year Ended December 31,: Professional ",
+g0016,"How many students did Laureate Education have enrolled across its institutions as of December 31, 2025?","Approximately 497,700 students",I do not know.,,
+g0064,"In which named clinical study did Viking Therapeutics report low, balanced discontinuation rates for VK2735?",The VENTURE study,"In the VENTURE study, Viking Therapeutics reported low, balanced discontinuation rates for VK2735. [1]","[1] Safety and Tolerability
+
+VK2735 demonstrated encouraging safety and tolerability following 13 weeks of once-weekly dosing. Discontinuation rates in the VENTURE study were low and well-balanced among patients treated with VK2735 compared with placebo. A total of 23 patients (13%) discontinued treatment in the study, 5 (14%) in the placebo cohort and 18 (13%) among VK2735-treated cohorts.
+
+Among patients receiving VK2735, the majority (92%) reported drug related TEAEs as mild or moderate in severity. The majority of TEAEs that were gastrointestinal, or GI, in nature (95%) were also reported as mild or moderate. Nausea was reported among patients receiving both VK2735 (43%) and placebo (20%). Among subjects receiving VK2735, the majority of reported nausea (68%) was characterized as mild (32% moderate, none severe). Vomiting was reported in 25/140 (18%) VK2735-treated patients compared with none reported among patients receiving placebo. GI-related adverse events were generally observed early in treatment, with decreasing
+
+frequency upon repeat dosing. Across the combined VENTURE study arms, the weekly rate of nausea did not exceed 5% at any point after the first week of treatment. One patient receiving VK2735 experienced an SAE of dehydration that was characterized as related to study drug.
+
+Phase 1 Clinical Data for VK2735 Subcutaneous
+
+In January 2022, we announced the initiation of a Phase 1 SAD and MAD clinical trial of VK2735. The Phase 1 trial was a randomized, double-blind, placebo-controlled SAD and MAD study in healthy adults. The SAD portion of the study evaluated VK2735 in healthy adults, while the MAD portion of the study enrolled healthy adults with a minimum body mass index of 30 kilograms per meter squared. The primary objectives of the study were to evaluate the safety and tolerability of single and multiple doses of VK2735 administered subcutaneously and identify suitable doses for further clinical development. The secondary objective was to evalu",
+g0072,"In the human-capital sections of their most recent 10-Ks, how many full-time employees did an insurance-technology platform provider, a wireless-transport equipment maker, and a digital-manufacturing company each report?","Insurance-technology platform: approximately 354; wireless-transport equipment maker: 898 full-time (900 total); digital-manufacturing company: 2,280 full-time",I do not know.,,
+g0045,How do this company's bottle cap products cut material use while helping packaged drinks last longer before spoiling?,"They make containers fully recyclable, cut weight to reduce waste, and improve oxygen and CO2 barrier properties, which can increase shelf-life.",I do not know.,,
+g0031,"What was Day One Biopharmaceuticals' product revenue, net, for the year ended December 31, 2025?","$155,421 thousand (about $155.4 million).",I do not know.,,
+g0062,What patient population is IN8BIO's product candidate INB-100 intended to treat?,Patients with hematological malignancies who have undergone allogeneic HSCT,I do not know.,,
+g0081,What was the total compensation paid to WNEB's chief executive officer for fiscal 2025?,The filing does not state this.,I do not know.,,
+g0064,"In which named clinical study did Viking Therapeutics report low, balanced discontinuation rates for VK2735?",The VENTURE study,I do not know.,,
+g0036,"Per Exzeo Group's revenue table, what was total revenue for the year ended December 31, 2025?","$216,980 thousand (about $217.0 million)",I do not know.,,
+g0013,"By how much did mean body weight fall from baseline after 13 weeks of weekly VK2735 dosing, at most?",Up to 14.7%,I do not know.,,
+g0052,How did the bank holding company's most recent annual profit stack up against the previous twelve months?,"Net income was $28,176,000 for 2025, up from $26,727,000 in 2024.","ChoiceOne reported net income of $28,176,000 for the year ended December 31, 2025, compared to net income of $26,727,000 for the same period in the prior year [1].","[1] RESULTS OF OPERATIONS
+
+Summary
+
+ChoiceOne reported net income of $28,176,000 for the year ended December 31, 2025, compared to net income of $26,727,000 for the same period in the prior year . Net income excluding merger expenses, net of taxes, and merger related provision for credit losses, net of taxes, was $51,524,000 for the year ended December 31, 2025. Diluted earnings per share were $2.01 for the year ended December 31, 2025, compared to diluted earnings per share of $3.25 for the same period in the prior year. Diluted earnings per share excluding merger expenses, net of taxes, and merger related provision for credit losses, net of taxes, were $3.68 for the year ended December 31, 2025.
+
+ChoiceOne's asset mix has shifted from loans held for investment of 69.8% of deposits at December 31, 2024 to 83.9% of deposits at December 31, 2025. As of December 31, 2025, total assets were $4.4 billion, an increase of $1.7 billion compared to December 31, 2024. The growth in total assets is primarily attributed to the Merger. In addition to growth related to the Merger, ChoiceOne also grew in core loans, securities and mortgage warehouse advances, which consist of a line of credit to fund participated mortgage loans. Interest rates and balances from this warehouse line of credit fluctuate with the national mortgage market and are short term in nature.
+
+Core loans, which exclude held for sale loans and mortgage warehouse advances, grew organically by $86.1 million or 5.7% during the twelve months ended December 31, 2025. Core loans also grew by $1.4 billion due to the Merger on March 1, 2025. As a result of loan growth and interest income due to accretion from purchased loans, loan interest income increased $83.3 million in the full year 2025 compared to the same period in 2024. Interest income for the year ended December 31, 2025, includes $13.1 million of interest income due to accretion from purchased loans compared to $1.2 million for the same period in 2024. Inter",
+g0007,What was ParkerVision's total full-time and part-time headcount at year-end 2025?,Seven full-time employees and one part-time employee.,"As of December 31, 2025, ParkerVision had seven full-time employees and one part-time employee [1].","[1] Employees
+
+As of December 31, 2025, we had seven full-time employees and one part-time employee. We also outsource certain specialty services, such as information technology (""IT"") and public relations, and utilize contract staff and third-party consultants from time to time to supplement our workforce. Our employees are not represented by any collective bargaining agreements and we consider our employee relations to be satisfactory.
+
+Following the COVID-19 pandemic, we reverted to fully remote worksites for all of our employees. Our management, with the oversight of our Board of Directors (""Board""), monitors the hiring, retention, and management of our employees.
+
+[2] Summary Compensation Table
+
+The following table summarizes the total compensation of each of our “named executive officers” as defined in Item 402(m) of Regulation S-K (the “Executives”) for the fiscal years ended December 31, 2025 and 2024. Given the complexity of disclosure requirements concerning executive compensation, and in particular with respect to the standards of financial accounting and reporting related to equity compensation, there is a difference between the compensation that is reported in this table versus that which is actually paid to and received by the Executives. The amounts in the Summary Compensation Table that reflect the full grant date fair value of an equity award, do not necessarily correspond to the actual value that has been realized or will be realized in the future with respect to these awards.
+
+[Table: t025]
+Summary Compensation Table
+Jeffrey Parker, CEO | (b) Year: 2025 | (c) Salary ($): $356,923 | (c) Salary ($): $- | (d) Bonus ($) (1): $- | (d) Bonus ($) (1): $1,720,000 | (e) Stock Awards ($)(2): $24,000 | (e) Stock Awards ($)(2): 4 | (f) Option Awards ($)(2)(3): $2,100,923
+ | (b) Year: 2024 | (c) Salary ($): 260,000 | (c) Salary ($): 350,000 | (d) Bonus ($) (1): - | (d) Bonus ($) (1): - | (e) Stock Awards ($)(2): 24,000 | (e) Stock Awards ($)(2): 634,000
+Cynthi",
+g0040,"How many shares of OSI Systems common stock were repurchased in May 2026, and at what average price per share?","398,966 shares at an average price of $220.38 per share","In May 2026, 398,966 shares of OSI Systems common stock were repurchased at an average price of $220.38 per share [1].","[1] Issuer Purchases of Equity Securities
+
+Excluding shares tendered to satisfy minimum statutory withholding obligations related to the vesting of RSUs, we repurchased 1,111,825 shares of common stock during fiscal year 2026 for $271.9 million. These repurchases included 546,945 shares acquired during the second fiscal quarter at an average price of $267.03 per share and 564,880 shares acquired during the fourth fiscal quarter at an average price of $218.82 per share. As of June 30, 2026, the maximum number of shares of common stock that may yet be purchased under the current plan authorized by the Board of Directors is 78,731.
+
+The following table contains information about the shares of common stock we purchased during the quarter ended June 30, 2026:
+
+[Table: t003]
+The following table contains information about the shares of common stock we purchased during the quarter ended June 30, 2026:
+
+
+
+
+
+
+
+
+
+April 1 to April 30, 2026 | col1: — | col2: — | col3: — | col4: 643,611
+May 1 to May 31, 2026 | col1: 398,966 | col2: 220.38 | col3: 398,966 | col4: 244,645
+June 1 to June 30, 2026 | col1: 165,914 | col2: 215.08 | col3: 165,914 | col4: 78,731
+ | col1: 564,880 | col2: 564,880
+
+(1) | In September 2022, when there were 1,131,301 shares remaining authorized to repurchase under the then-existing share repurchase program, the Board of Directors renewed the authorization and revised the maximum number of shares to 2,000,000 shares authorized under the stock repurchase program. Upon repurchase, shares of common stock are restored to the status of authorized but unissued shares, and we record them as a reduction in the number of shares of common stock issued and outstanding in our consolidated financial statements.
+
+[2] Restricted Stock Units—A summary of RSU activity for the periods indicated was as follows:
+
+[Table: t044]
+
+The per-share weighted average grant-date fair value of RSUs granted under the OSI Plan was $95.42, $127.88, and $226.58 for fiscal 2024, 2025 and 2026, r",
+g0078,"How many Authorized Participants does the abrdn Platinum ETF Trust currently have, and who are they?",The filing does not state this.,"The abrdn Platinum ETF Trust currently has 9 Authorized Participants: Goldman Sachs & Co., HSBC Securities (USA) Inc., J.P. Morgan Securities LLC, Merrill Lynch Professional Clearing Corp., Mizuho Securities USA LLC, Morgan Stanley & Co. Inc., Scotia Capital (USA) Inc., UBS Securities LLC and Virtu Americas, LLC. [1]","[1] Introduction
+
+The abrdn Platinum ETF Trust (the “Trust”) is a trust formed under the laws of the State of New York. The Trust does not have any officers, directors, or employees, and is administered by The Bank of New York Mellon (the “Trustee”) acting as trustee pursuant to the Depositary Trust Agreement (the “Trust Agreement”) between the Trustee and abrdn EFTs Sponsor LLC, the sponsor of the Trust (the “Sponsor”). The Trust issues shares (“Shares”) representing fractional undivided beneficial interests in its net assets. The assets of the Trust consist of platinum bullion held by a custodian as an agent of the Trust and responsible only to the Trustee.
+
+The Trust is a passive investment vehicle and the objective of the Trust is for the value of each Share to approximately reflect, at any given time, the price of the platinum bullion owned by the Trust, less the Trust’s liabilities (anticipated to be principally for accrued operating expenses), divided by the number of outstanding Shares. The Trust does not engage in any activities designed to obtain a profit from, or ameliorate losses caused by, changes in the price of platinum.
+
+The Trust issues and redeems Shares only in exchange for platinum, only in aggregations of 50,000 Shares or integral multiples thereof (each, a “Basket”), and only in transactions with registered broker-dealers (or other securities market participants not required to register as broker-dealers such as banks or other financial institutions) who (1) are participants in the DTC and (2) have previously entered into an agreement with the Trust governing the terms and conditions of such issuance (such dealers, the “Authorized Participants”).
+
+As of the date of this annual report the Authorized Participants that have signed an Authorized Participant Agreement with the Trust are Goldman Sachs & Co., HSBC Securities (USA) Inc., J.P. Morgan Securities LLC, Merrill Lynch Professional Clearing Corp., Mizuho Securities USA LLC, Morgan Stanley & C",
+g0085,What was Laureate Education's employee turnover rate for fiscal year 2025?,The filing does not state this.,The filings do not contain this information.,"[1] Summary Comparison of Consolidated Results
+
+Comparison of Consolidated Results for the Years Ended December 31, 2025, 2024 and 2023
+
+[Table: t007]
+Comparison of Consolidated Results for the Years Ended December 31, 2025, 2024 and 2023
+Revenues | % Change Better/(Worse): Revenues | % Change Better/(Worse): Revenues | % Change Better/(Worse) 2025: $1,701.9 | % Change Better/(Worse) 2025: $1,566.6 | % Change Better/(Worse) 2025: $1,484.3 | % Change Better/(Worse) 2024: 9 | % Change Better/(Worse) 2024: 9% | % Change Better/(Worse) 2024: 6 | % Change Better/(Worse) 2023: 6%
+Direct costs | % Change Better/(Worse): Direct costs | % Change Better/(Worse): Direct costs | % Change Better/(Worse) 2025: 1,219.8 | % Change Better/(Worse) 2025: 1,219.8 | % Change Better/(Worse) 2025: 1,146.9 | % Change Better/(Worse) 2024: 1,146.9 | % Change Better/(Worse) 2024: 1,089.8 | % Change Better/(Worse) 2024: 1,089.8 | % Change Better/(Worse) 2023: (6) | 2023: (6)% | 2023: (5) | 2025 vs. 2024: (5)%
+General and administrative expenses | % Change Better/(Worse): General and administrative expenses | % Change Better/(Worse): General and administrative expenses | % Change Better/(Worse) 2025: 51.1 | % Change Better/(Worse) 2025: 51.1 | % Change Better/(Worse) 2025: 45.8 | % Change Better/(Worse) 2024: 45.8 | % Change Better/(Worse) 2024: 52.6 | % Change Better/(Worse) 2024: 52.6 | % Change Better/(Worse) 2023: (12) | 2023: (12)% | 2023: 13 | 2025 vs. 2024: 13%
+Loss on impairment of assets | % Change Better/(Worse): Loss on impairment of assets | % Change Better/(Worse): Loss on impairment of assets | % Change Better/(Worse) 2025: — | % Change Better/(Worse) 2025: — | % Change Better/(Worse) 2025: — | % Change Better/(Worse) 2024: — | % Change Better/(Worse) 2024: 3.1 | % Change Better/(Worse) 2024: 3.1 | % Change Better/(Worse) 2023: nm | 2023: nm | 2023: nm | 2025 vs. 2024: 100 | 2025 vs. 2024: 100%
+Operating income | % Change Better/(Worse): Operating income | % Change Better/(Worse):",
+g0012,"How large is Proto Labs' owned facility in Rosemount, Minnesota?","Approximately 130,000 square feet","Proto Labs' owned facility in Rosemount, Minnesota encompasses approximately 130,000 square feet of manufacturing and office space [1].","[1] We believe that our facilities are well maintained and of sufficient capacity to support our current operations. We have facilities in the following regions:
+
+United States
+
+Our corporate headquarters are located in Maple Plain, Minnesota in a facility we own encompassing approximately 95,000 square feet of office space. We own a facility in Rosemount, Minnesota that encompasses approximately 130,000 square feet of manufacturing and office space. We own a facility in Plymouth, Minnesota that encompasses approximately 170,000 square feet of manufacturing and office space. We own a facility in Brooklyn Park, Minnesota that encompasses approximately 215,000 square feet of manufacturing and office space.
+
+We own two facilities in Cary, North Carolina that encompasses approximately 197,000 square feet of manufacturing and office space.
+
+We own a facility in Nashua, New Hampshire and lease a second facility. The lease expires in 2026. The New Hampshire facilities provide a total of approximately 128,000 square feet of manufacturing and office space.
+
+[2] Overview
+
+Proto Labs, Inc. was incorporated in Minnesota in 1999. The terms “Proto Labs,” ""Protolabs,"" the “Company,” “we,” “us,” and “our” as used herein refer to the business and operations of Proto Labs, Inc. and its subsidiaries.
+
+We are the world’s fastest manufacturing service enabling companies across every industry to streamline production of quality parts throughout the entire product life cycle. From custom prototyping to end-use production, we support product developers, engineers, and supply chain teams along every phase of their manufacturing journey. Founded in 1999, we radically reduced the time needed to produce injection molding prototypes through complex software that automated the manufacturing process. Over the next two decades, we added computer numerical control (""CNC"") machining, 3D printing, and sheet metal fabrication, and later acquired 3D Hubs, Inc (""Hubs"") and launched the Protolabs Network",
+g0094,"For Theriva Biologics' fiscal 2025 10-K: (a) what does the MD&A say raises substantial doubt about the company's ability to continue, and (b) how much cash and cash equivalents did the company have at December 31, 2025?",(a) Continued operating losses and the need for additional capital or other strategic actions raise substantial doubt about going concern within the next twelve months. (b) Approximately $13.1 million.,"The MD&A states that the company's ability to continue as a going concern is raised by its significant accumulated deficit, ongoing losses, and the need for additional capital for future clinical trials [3]. The company had cash and cash equivalents of approximately $13.1 million at December 31, 2025 [1].","[1] Theriva Biologics, Inc. and Subsidiaries
+
+Notes to Consolidated Financial Statements
+
+2. Going Concern – (continued)
+
+At December 31, 2025, the Company had cash and cash equivalents of approximately $13.1 million. Based upon the Company’s current business plans, management believes that the Company’s current cash on hand will be sufficient to fully execute its plans into the first quarter of 2027. Commencement of planned future clinical trials is subject to the Company’s successful pursuit of opportunities that will allow it to establish the clinical infrastructure and financial resources necessary to successfully initiate and complete its plan. The Company anticipates its current cash will allow it to cover overhead costs, close out of the VIRAGE Phase 2b clinical trial, exploratory VCN-01 (zabilugene almadenorepvec) manufacturing scale-up activities, regulatory interactions regarding proposed VCN-01 clinical trials in PDAC and retinoblastoma, and preclinical studies supporting VCN-01 and VCN-12, the first candidate from our VCN-X discovery program. The Company also believes that the cash will be sufficient to fund its committed obligations under the terms of the VCN Share Purchase Agreement entered into in connection with the Acquisition (the “Purchase Agreement”), but will not be sufficient for additional trials of VCN-01, or SYN-004, or to complete the last cohort of the Phase 1b/2a clinical trial of SYN-004, which are expected to require significant cash expenditures. Following the completion of the Company’s ongoing Phase 1 and Phase 2b clinical trials for VCN-01, complete and commence a potential Phase 2a study evaluating VCN-01 dosing frequency, and preclinical studies supporting VCN-01 and its discovery initiatives, the Company will need to obtain additional funds for future clinical trials. The Company anticipates that its future clinical trials will be much larger in size and require larger cash expenditures than the aforementioned clinical programs a",
+g0070,"As of December 31, 2025, what accumulated deficit did each of the following report: an allogeneic cell-therapy biotech that also discontinued a renal-cancer program, a second cell-therapy biotech developing a gamma-delta T-cell candidate, and a media-and-fintech holding company that underwent a redomiciliation merger?","Adicet Bio: $614.7 million; IN8BIO: $141.1 million; Triller Group: $1,378.2 million",The filings do not contain this information.,"[1] We have incurred net losses since our inception and anticipate that we will incur substantial net losses in the future.
+
+We are an early clinical stage biopharmaceutical company. Investment in biopharmaceutical product development is highly speculative because it entails substantial upfront capital expenditures and significant risk that any potential product candidate will fail to demonstrate adequate effect or an acceptable safety profile, gain regulatory approval and become commercially viable. We have no products approved for commercial sale and have not generated any revenue from product sales to date, and we will continue to incur significant research and development and other expenses related to our ongoing operations. As a result, we are not profitable and have incurred net losses since our inception. To date, we have financed our operations primarily with proceeds from our license and collaboration agreements and the issuance and sale of our capital stock, including most recently: (i) net proceeds of approximately $19.3 million, after deducting sales agent commissions, but before deducting any expenses related to such sales, from sales of our common stock under our “at-the-market” program in January 2024; (ii) net proceeds of approximately $91.7 million, after deducting the underwriting discount and commissions and other estimated offering expenses, from the sale of our common stock and pre-funded warrants in an underwritten public offering in January 2024; and (iii) net proceeds of approximately $74.8 million, after deducting the underwriting discount and commissions and other estimated offering expenses, from the sale of our common stock and pre-funded warrants in an underwritten registered direct offering in October 2025. For the year ended December 31, 2025, we recorded net loss of $116.8 million. As of December 31, 2025, we had an accumulated deficit of $614.7 million.
+
+We expect to incur significant expenditures for the foreseeable future, and we e",
+g0095,"For Ares Management's Credit Group: (a) how much AUM and how many funds did it have as of December 31, 2025, and (b) in which markets is it described as one of the largest self-originating direct lenders?","(a) $406.9 billion of AUM across over 305 funds; (b) the U.S. and European middle markets, with a growing presence in the APAC region",I do not know.,,
+g0083,"How many patents has Saffron Tech, Sativus Tech Corp.'s subsidiary, obtained for its Controlled Environment Agriculture technology?",The filing does not state this.,I do not know.,,
+g0071,"Among a real estate investment company, an offshore drilling contractor, and a hepatitis and RSV-focused biopharmaceutical company, which one's fiscal year covered by this filing ended in June 2025, not September or December?","The real estate investment company (MacKenzie Realty Capital), with a fiscal year ended June 30, 2025.",I do not know.,,
+g0088,"For Adicet Bio's prula-cel program: (a) what indication did the FDA's December 2023 IND clearance cover, (b) which autoimmune indications were added in August 2024, and (c) which indications did the October 2024 IND amendment add?","(a) Lupus nephritis (LN); (b) systemic lupus erythematosus (SLE), systemic sclerosis (SSc), and ANCA-associated vasculitis (AAV); (c) idiopathic inflammatory myopathies (IIM) and stiff person syndrome (SPS)",I do not know.,,
+g0049,"Roughly how much capital did this firm manage on behalf of clients, and about how many staff did it have worldwide, per its business overview?","About $622.5 billion, with over 4,250 staff in more than 55 offices across over 25 countries","Ares Management Corp managed approximately $622.5 billion in assets under management (AUM) and had over 4,250 employees worldwide as of December 31, 2025 [1].","[1] Overview
+
+Ares is a leading global alternative investment manager with $622.5 billion of assets under management and over 4,250 employees in over 55 offices in more than 25 countries. We offer our investors a range of investment strategies and seek to deliver attractive performance to an investor base that includes over 2,850 direct institutional relationships and a significant retail investor base across our publicly-traded funds, sub-advised accounts and perpetual wealth vehicles. Since our inception in 1997, we have adhered to a disciplined investment philosophy that focuses on delivering strong risk-adjusted investment returns through market cycles. Ares believes each of its distinct but complementary investment groups in Credit, Real Assets, Secondaries and Private Equity is a market leader based on assets under management and investment performance. We believe we create value for our stakeholders not only through our investment performance, but also by expanding our product offerings, enhancing our distribution channels, increasing our global presence, investing in our non-investment functions, securing strategic partnerships and completing strategic acquisitions and portfolio purchases.
+
+Our AUM has grown to $622.5 billion as of December 31, 2025 from $94.0 billion a decade earlier. As shown in the chart below, over the past five and 10 years, our assets under management have achieved a compound annual growth rate (“CAGR”) of 26% and 21%, respectively ($ in billions):
+
+We have an established track record of delivering strong risk-adjusted returns through market cycles. We believe our consistent and strong performance in a broad range of alternative investments has been shaped by several distinguishing features of our platform:
+
+•Comprehensive Multi-Asset Class Expertise and Flexible Capital: Our proficiency at evaluating every level of the capital structure, from senior debt to common equity, across companies, structured assets, real estate projects, and ",
+g0087,"For Pinnacle West's cybersecurity program: (a) how much experience does the Director of Cybersecurity have, (b) which board committee provides ultimate oversight and how often is it briefed, and (c) have any past cybersecurity incidents materially affected the Company?","(a) More than twenty years, including more than ten at the Company; (b) the Nuclear and Operating Committee, briefed at least twice a year; (c) no, none to date that have materially affected Pinnacle West or APS.","The Director of Cybersecurity has more than twenty years of experience in information technology and cybersecurity roles, with more than ten of those years at the Company [1]. The Nuclear and Operating Committee of the Company’s Board of Directors provides ultimate oversight and receives briefings at least twice per year [1]. To date, we do not believe there have been any previous cybersecurity incidents that have materially affected or are reasonably likely to materially affect Pinnacle West or APS [1].","[1] The Company prioritizes and maintains a high level of commitment to responsible and secure cybersecurity practices given the critical nature of its services and the potential consequences of a successful cyber-attack on the Company and the electric grid. A successful cyber-attack could have far-reaching consequences, from compromising the integrity of sensitive data to disrupting power supply. To that end, the Company implements a robust risk management, strategy, and governance regime aimed at implementing controls to identify, mitigate, remediate, and communicate cyber threats at appropriate levels within the organization.
+
+APS’s cybersecurity group (the “Cybersecurity Group”) is comprised of cybersecurity analysts, engineers, architects, and others, led by the Director of Cybersecurity, who reports to APS’s Vice President, Operations Support. The Director of Cybersecurity has more than twenty years of experience in
+
+information technology and cybersecurity roles, with more than ten of those years at the Company. The Director of Cybersecurity also holds cybersecurity certifications from multiple certifying bodies and is active in utility cybersecurity professional organizations. The Cybersecurity Group has day-to-day responsibility for safeguarding the Company’s critical assets and assessing, identifying, and managing material risks from cybersecurity threats.
+
+In fulfilling its responsibility, the Cybersecurity Group manages formal documented internal processes such as risk management and vulnerability scanning, as well as other processes, such as assessing threat intelligence, that include outside partners. Intelligence sharing comes from industry sources such as the Electricity Information Sharing and Analysis Center, government sources, as well as commercially purchased information sources. The Cybersecurity Group also engages third parties for assessments and audits of its systems periodically and as needed. Such assessments and audits may include, among ",
+g0065,Where was ParkerVision's postponed patent enforcement trial against MediaTek scheduled to take place?,The Western District of Texas.,The postponed patent enforcement trial against MediaTek was scheduled to take place in the Western District of Texas [1].,"[1] ParkerVision v. MediaTek (Western District of Texas)
+
+We filed three patent infringement actions in the Western District of Texas against MediaTek Inc. and MediaTek USA Inc. (collectively, ""MediaTek""), the first in 2022 and two additional cases in 2023, alleging infringement of an aggregate of ten of our patents. One of the patents was voluntarily dropped from the first MediaTek case in 2024 and MediaTek likewise terminated an IPR petition it had initiated against the same patent. A claim construction hearing was held in January 2024 in the first MediaTek action and the court adopted the majority of our claim constructions. A jury trial for the first MediaTek action was scheduled to commence on March 20, 2026; however, on March 16, 2026 at a pretrial conference, the court postponed the trial date pending requested updates to the expert reports and related briefings. A new trial schedule has not yet been established.
+
+A claim construction hearing was held in June 2024 in the second MediaTek action, and the court adopted the majority of our recommended claim constructions in January 2025. The trial for the second MediaTek action had been scheduled for November 2026. However, in July 2025, the second case was stayed pending the PTAB's final written decision on IPRs impacting patents in this case. The PTAB decision was initially expected by November 2025, but the PTAB extended its deadline to May 2026.
+
+The third MediaTek action had a claim construction hearing in June 2025 and in November 2025, the court adopted all of our proposed constructions. A trial in this third action is currently scheduled for April 2027.
+
+[2] Recent Developments
+
+Legal Proceedings
+
+In March 2026, our patent enforcement trial against MediaTek, scheduled to commence in the Western District of Texas, was postponed by the court pending updates to expert reports and related briefings by the parties. The court will issue a revised pretrial and trial schedule following its receipt of these submis",
+g0058,What drove the rise in the company's bottom-line profit for the latest fiscal year versus the one before it?,"Higher operating income, lower financing costs, and lower taxes in 2025.",I do not know.,,
+g0071,"Among a real estate investment company, an offshore drilling contractor, and a hepatitis and RSV-focused biopharmaceutical company, which one's fiscal year covered by this filing ended in June 2025, not September or December?","The real estate investment company (MacKenzie Realty Capital), with a fiscal year ended June 30, 2025.",The real estate investment company's fiscal year covered by this filing ended in June 2025. [3],"[1] Fiscal 2025 Investment Activity
+
+A summary of our significant investment activity that occurred during the year ended December 31, 2025 follows:
+
+•We funded $325.6 million of acquisitions, which included the settlement of $50.8 million of mortgage and other notes receivable as part of the consideration paid by us.
+
+•We funded $71.1 million of mortgage and other note investments.
+
+•We transitioned seven properties from our Real Estate Investments segment into our SHOP segment and dissolved the Discovery partnership.
+
+•We reclassified $3.6 million of assets as held for sale on our consolidated balance sheet as of December 31, 2025 which related to one real estate property in the Real Estate Investments segment.
+
+[2] KBS REAL ESTATE INVESTMENT TRUST III, INC.
+
+NOTES TO CONSOLIDATED FINANCIAL STATEMENTS (CONTINUED)
+
+December 31, 2025
+
+5. REAL ESTATE SALES
+
+During the year ended December 31, 2024, the Company sold two office properties to purchasers unaffiliated with the Company or the Advisor. In February 2024, the Company completed the sale of one office property for $48.8 million, before third-party closing costs and disposition fees payable to the Advisor, and in November 2024, the Company sold one office property for $151.0 million, before third-party closing costs, credits and disposition fees payable to the Advisor. The Company recognized a gain on sale of $53.1 million related to these dispositions. During the year ended December 31, 2025, the Company sold one office property and one mixed-use office/retail property to purchasers unaffiliated with the Company or the Advisor. In July 2025, the Company completed the sale of one office property for $126.5 million, before third-party closing costs, credits and disposition fees payable to the Advisor, and in September 2025, the Company sold one mixed-use office/retail property for $100.0 million, before third-party closing costs, credits and disposition fees payable to the Advisor. The Company recognized a gain on",
+g0025,"What was Aerkomm's net cash used in operating activities for the year ended December 31, 2025?","$(5,635,927).","Aerkomm's net cash used in operating activities for the year ended December 31, 2025 was $5,635,927 [1].","[1] Operating Activities
+
+Net cash used in operating activities was $5,635,927 for the year ended December 31, 2025, as compared to $5,649,924 for the year ended December 31, 2024. In addition to the net loss of $18,274,673, the decrease in net cash used in operating activities during the year ended December 31, 2025 was mainly due to decrease in accounts payable and operating lease liability of $300,099 and $145,783, respectively, offset by non-cash items of $5,961,248, which consisted of depreciation and amortization, stock-based compensation, loss from disposal equipment, change in fair value of SAFE liabilities, impairment loss on investment, loss on inventories write off, loss on disposal of subsidiaries, and gain on settlement of accounts payable. The decrease also offset by increase in accrued expense and other payable of $5,016,463 and $2,135,460, respectively.
+
+Net cash provided by and used in operating activities was $5,649,924 for the year ended December 31, 2024, as compared to $2,145,787 for the year ended December 31, 2023. In addition to the net loss of $29,194,851, the decrease in net cash used in operating activities during the year ended December 31, 2024 was mainly due to increase in inventories, other receivable, and prepayment from customer – related party of $567,443, $269,882, and $644,570, respectively, offset by non-cash items of $12,179,923 which consisted of depreciation and amortization, stock-based compensation, non-cash R&D expense, change in fair value of SAFE liabilities, and impairment loss on investment. The decrease also offset by decrease in prepayment for equipment and intangible assets – customer projects, increase in account payable, increase in accrued expense, and increase in other payable of $3,952,458, $611,213, $5,461,682 and $2,483,498, respectively.
+
+[2] Liquidity and Capital Resources
+
+In assessing our liquidity, we monitor and analyzes its cash on-hand and its operating and capital expenditure commitments. Our liquidit",
+g0003,"How many patents and patents pending did Ingredion own as of December 31, 2025?","More than 1,800 patents and patents pending.",I do not know.,,
+g0061,From which company does Telomir Pharmaceuticals in-license its lead candidate Telomir-1?,MIRALOGX.,Telomir Pharmaceuticals in-licenses its lead candidate Telomir-1 from MIRALOGX [1].,"[1] Risks Related to Our Intellectual Property
+
+We depend on rights to Telomir-1 that are or will be licensed to us. We do not own the intellectual property rights to Telomir-1 and any loss of our rights to it could prevent us from selling our product.
+
+Within our present and future pipeline of treatments, Telomir-1 is in-licensed from MIRALOGX. We do not currently own any intellectual property rights, including the patent application that underlies this license. Our rights to use Telomir-1 is subject to the negotiation of, continuation of and compliance with the terms of this license. Thus, the non-provisional patent application is not written by us or our attorneys, and we did not have control over the drafting and prosecution. The patent owner and our licensor might not have given the same attention to the drafting and prosecution of these patents and applications as we would have if we had been the owner of the patent application and had control over the drafting. We cannot be certain that drafting of the licensed patent application, or patent prosecution, by the licensor have been or will be conducted in compliance with applicable laws and regulations or will result in valid and enforceable patents and other intellectual property rights. This absence of control over the drafting, prosecution of patent and applications, along with non-compliance with royalty payments and confidentiality breaches are just some of the ways that may result in the Company’s’ loss of the license and inability to continue operations.
+
+Significant additional research and development activity, pre-clinical testing, and/or clinical testing Telomir-1 is required before we will have a chance to achieve a viable product for licensing or commercialization. Our business currently depends entirely on the successful development, regulatory approval, and licensing or commercialization of our product candidate, which may never occur.
+
+Enforcement of our licensed patent application or defense of a",
+g0071,"Among a real estate investment company, an offshore drilling contractor, and a hepatitis and RSV-focused biopharmaceutical company, which one's fiscal year covered by this filing ended in June 2025, not September or December?","The real estate investment company (MacKenzie Realty Capital), with a fiscal year ended June 30, 2025.",I do not know.,,
+g0054,"For its latest fiscal year, what net inflow did Adicet Bio book from money movements tied to buying and cashing in short-duration government notes?",A net inflow of $2.4 million,I do not know.,,
+g0025,"What was Aerkomm's net cash used in operating activities for the year ended December 31, 2025?","$(5,635,927).",I do not know.,,
+g0061,From which company does Telomir Pharmaceuticals in-license its lead candidate Telomir-1?,MIRALOGX.,I do not know.,,
+g0077,How much total compensation did OSI Systems pay its Chief Executive Officer for fiscal year 2026?,The filing does not state this.,I do not know.,,

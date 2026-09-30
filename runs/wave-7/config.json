@@ -1,0 +1,7 @@
+{
+  "index": "bge_small__s2",
+  "search": "hybrid",
+  "reranker": "monot5",
+  "k": 50,
+  "top": 8
+}
