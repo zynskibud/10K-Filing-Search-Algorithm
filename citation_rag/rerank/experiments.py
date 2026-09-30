@@ -25,6 +25,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+LISTWISE_CANDIDATES = 20  # wave 7: 50 candidates in one prompt timed out
+
 RERANKER_NAMES = ["none", "mmr", "colbert", "cross_encoder", "monot5", "llm_listwise"]
 
 # Candidate pool size before reranking (the plan's "top 50"), and the final
@@ -106,8 +108,9 @@ def build_reranker(
             if llm_client is None:
                 from citation_rag.llm import OllamaClient
 
-                llm_client = OllamaClient(model="qwen3:8b", think=False, format="json")
+                llm_client = OllamaClient(model="qwen3:8b", think=False, format="json", timeout=900)
             kwargs["client"] = llm_client
+        kwargs.setdefault("max_candidates", LISTWISE_CANDIDATES)
         return ListwiseReranker(**kwargs)
     raise ValueError(f"unknown reranker: {name!r}; expected one of {RERANKER_NAMES}")
 
@@ -212,7 +215,15 @@ def main(argv: "list[str] | None" = None) -> int:
         help="comma-separated subset of " + ",".join(RERANKER_NAMES) + " (GPU arm: llm_listwise,mmr)",
     )
     parser.add_argument("--out-dir", default="runs/wave-6", help="where rerank.md and rows.json go")
+    parser.add_argument("--listwise-candidates", type=int, default=None,
+                        help="candidates in the listwise prompt (default 20)")
     args = parser.parse_args(argv)
+    if args.listwise_candidates:
+        global LISTWISE_CANDIDATES
+        LISTWISE_CANDIDATES = args.listwise_candidates
+    if getattr(args, "listwise_candidates", None):
+        global LISTWISE_CANDIDATES
+        LISTWISE_CANDIDATES = args.listwise_candidates
     names = [x.strip() for x in args.rerankers.split(",") if x.strip()] if args.rerankers else None
     bad = [n for n in (names or []) if n not in RERANKER_NAMES]
     if bad:

@@ -58,6 +58,7 @@ class ListwiseReranker:
     client: LLMClient
     name: str = "llm_listwise"
     truncate_tokens: int = TRUNCATE_TOKENS
+    max_candidates: int | None = None
     prompt_template: str = LISTWISE_PROMPT_TEMPLATE
     last_wall_ms: float = field(default=0.0, init=False, repr=False)
 
@@ -102,9 +103,14 @@ class ListwiseReranker:
             self.last_wall_ms = (time.perf_counter() - t0) * 1000.0
             return []
 
-        prompt = self._build_prompt(question, candidates)
+        # Only the first `max_candidates` (fusion order) go into the prompt;
+        # the rest keep their fusion order after them. Wave 7 timed out with 50.
+        head = candidates[: self.max_candidates] if self.max_candidates else candidates
+        tail = candidates[len(head):]
+        prompt = self._build_prompt(question, head)
         raw = self.client.complete(prompt)
-        order = self._parse_order(raw, len(candidates))
+        order = self._parse_order(raw, len(head)) + list(range(len(head), len(head) + len(tail)))
+        candidates = head + tail
         self.last_wall_ms = (time.perf_counter() - t0) * 1000.0
 
         n = len(candidates)

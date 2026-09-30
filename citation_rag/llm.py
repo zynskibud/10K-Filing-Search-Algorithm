@@ -88,6 +88,7 @@ class OllamaClient:
     last_input_tokens: int | None = field(default=None, init=False, repr=False)
     last_output_tokens: int | None = field(default=None, init=False, repr=False)
     last_wall_time_s: float | None = field(default=None, init=False, repr=False)
+    last_thinking_chars: int | None = field(default=None, init=False, repr=False)
 
     def complete(self, prompt: str) -> str:
         import httpx
@@ -102,7 +103,11 @@ class OllamaClient:
             "stream": False,
             "options": options,
         }
-        if self.format is not None:
+        # Wave 7 finding: with `format: json` set, Qwen3's thinking produced no
+        # measurable thinking output (median about 100 output tokens with think
+        # on). Structured output constrains decoding from the first token, so
+        # when thinking is on we drop `format` and parse the JSON from the text.
+        if self.format is not None and not self.think:
             payload["format"] = self.format
         if self.think is not None:
             payload["think"] = self.think
@@ -114,4 +119,5 @@ class OllamaClient:
         self.last_wall_time_s = time.perf_counter() - start
         self.last_input_tokens = data.get("prompt_eval_count")
         self.last_output_tokens = data.get("eval_count")
+        self.last_thinking_chars = len(data.get("thinking") or "")
         return data["response"]

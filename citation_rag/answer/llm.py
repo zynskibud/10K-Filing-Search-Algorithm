@@ -62,6 +62,10 @@ class OllamaChat:
         return self._client.last_output_tokens
 
     @property
+    def last_thinking_chars(self) -> int | None:
+        return self._client.last_thinking_chars
+
+    @property
     def last_wall_time_s(self) -> float | None:
         return self._client.last_wall_time_s
 

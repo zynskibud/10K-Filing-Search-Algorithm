@@ -77,7 +77,7 @@ def parse_response(raw: str, *, require_citations: bool = True) -> dict[str, Any
     """Parse the model's JSON reply into a dict with `answer`, `citations`,
     `answerable`. Raises AnswerParseError on malformed output."""
     try:
-        data = json.loads(raw)
+        data = json.loads(_first_json_object(raw))
     except json.JSONDecodeError as exc:
         raise AnswerParseError(f"response is not valid JSON: {exc}") from exc
     if not isinstance(data, dict):
@@ -92,3 +92,37 @@ def parse_response(raw: str, *, require_citations: bool = True) -> dict[str, Any
         citations = []
     data["citations"] = citations
     return data
+
+
+def _first_json_object(raw: str) -> str:
+    """The first balanced {...} in `raw` (models without `format: json` may
+    add text around the object, or a <think> block). Returns `raw` unchanged
+    when no object is found, so json.loads raises as before."""
+    text = raw
+    end_think = text.rfind("</think>")
+    if end_think != -1:
+        text = text[end_think + len("</think>"):]
+    start = text.find("{")
+    if start == -1:
+        return raw
+    depth = 0
+    in_str = False
+    esc = False
+    for i in range(start, len(text)):
+        c = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+        elif c == '"':
+            in_str = True
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return raw

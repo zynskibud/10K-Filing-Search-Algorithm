@@ -183,6 +183,7 @@ def answer(
         ("last_wall_time_s", "llm_wall_time_s"),
         ("last_input_tokens", "llm_input_tokens"),
         ("last_output_tokens", "llm_output_tokens"),
+        ("last_thinking_chars", "llm_thinking_chars"),
     ):
         val = getattr(llm_client, attr, None)
         if val is not None:
