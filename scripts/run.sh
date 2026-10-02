@@ -52,7 +52,17 @@ RUN_DIR="$REPO_ROOT/runs/wave-$WAVE"
 LOG="$RUN_DIR/console.log"
 mkdir -p "$RUN_DIR"
 
+next_is_other() {
+  # .coord/gpu.next reserves the next GPU window; honor it unless it names us.
+  local n="$AI_ENGINEERING_ROOT/.coord/gpu.next"
+  [ -s "$n" ] && ! grep -qi "^citation" "$n"
+}
+
 take_lock() {
+  if next_is_other; then
+    echo "gpu.next reserves the next GPU window: $(head -1 "$AI_ENGINEERING_ROOT/.coord/gpu.next"). Not starting." >&2
+    return 3
+  fi
   if [ -d "$AI_ENGINEERING_ROOT/.coord/heavy.lock" ] || [ -d "$AI_ENGINEERING_ROOT/.coord/timing.lock" ]; then
     echo "another lock is held (heavy.lock or timing.lock). Not starting." >&2
     return 3
